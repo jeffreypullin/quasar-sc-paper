@@ -1,0 +1,12 @@
+name: starcat
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - scanpy
+  - scipy
+  - matplotlib
+  - pip
+  - pandas
+  - pip:
+      - starcatpy

@@ -1,0 +1,14 @@
+name: slingshot
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base
+  - bioconductor-slingshot
+  - bioconductor-anndatar
+  - bioconductor-singlecellexperiment
+  - bioconductor-delayedmatrixstats
+  - bioconductor-hdf5array
+  - r-hdf5r
+  - r-ggplot2
+  - r-readr

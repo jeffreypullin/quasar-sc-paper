@@ -1,0 +1,12 @@
+name: annotation
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bx-python
+  - pandas==2.3.3
+  - numpy
+  - gzip
+  - pip:
+     - qtl==0.1.10
+  

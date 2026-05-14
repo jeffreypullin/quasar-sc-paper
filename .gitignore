@@ -1,0 +1,5 @@
+SAIGEQTL/
+output/
+.nextflow/
+data
+nextflow
