@@ -88,7 +88,7 @@ build_qq_plot_data <- function(data_files, type) {
 }
 
 sc_int_plot_data <- build_qq_plot_data(sc_data_files, "int") |>
-  mutate(source = "sc")
+  mutate(source = "sc (within-sample perm)")
 
 int_plot_data <- bind_rows(sc_int_plot_data)
 
@@ -103,18 +103,19 @@ int_p <- int_plot_data |>
   labs(
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)",
-    colour = "Source"
+    colour = "Source",
+    title = "Within-sample pseudotime permutation null (interaction)"
   )
 
 ggsave(
-  "perm-sc-int-plot.pdf",
+  "perm-sc-int-within-plot.pdf",
   int_p,
   width = 12,
   height = 10
 )
 
 sc_main_plot_data <- build_qq_plot_data(sc_data_files, "main") |>
-  mutate(source = "sc")
+  mutate(source = "sc (within-sample perm)")
 main_plot_data <- bind_rows(sc_main_plot_data)
 
 main_p <- main_plot_data |>
@@ -128,11 +129,12 @@ main_p <- main_plot_data |>
   labs(
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)",
-    colour = "Source"
+    colour = "Source",
+    title = "Within-sample pseudotime permutation null (main effect)"
   )
 
 ggsave(
-  "perm-sc-int-main-plot.pdf",
+  "perm-sc-int-within-main-plot.pdf",
   main_p,
   width = 12,
   height = 10

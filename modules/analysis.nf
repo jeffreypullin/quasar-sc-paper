@@ -24,6 +24,17 @@ process PERMUTE_COV {
     """
 }
 
+process PERMUTE_SC_COV_WITHIN {
+
+    input: tuple val(int_cov), val(cell_type), val(cov), val(ind)
+    output: tuple val(int_cov), val(cell_type), path("permute-within-${cell_type}-${int_cov}-${ind}.tsv")
+
+    script:
+    """
+    permute-sc-cov-within.R "$ind" "$cell_type" "$int_cov" "$cov"
+    """
+}
+
 process PLOT_POWER {
     publishDir "output"
 
@@ -43,7 +54,7 @@ process PLOT_POWER {
 }
 
 process COMPUTE_CONVERGENCE {
-    label "nano"
+    //label "nano"
     
     input: tuple val(info), val(region_file), val(variant_file), val(time_file), val(gene_properties_files), val(power_file)
     output: tuple val(info), val(region_file), val(variant_file), val(time_file), val(gene_properties_files), val(power_file),
@@ -184,6 +195,19 @@ process PLOT_INT_OUTPUT {
     """
 }
 
+process PLOT_PERM_SC_INT_GLOBAL {
+    publishDir "output"
+    //label "high_mem"
+
+    input: val perm_sc_quasar_file
+    output: tuple path("perm-sc-int-global-plot.pdf"), path("perm-sc-int-global-main-plot.pdf")
+
+    script:
+    """
+    plot-perm-sc-int-global.R $perm_sc_quasar_file
+    """
+}
+
 process PLOT_PERM_SC_INT {
     publishDir "output"
     //label "high_mem"
@@ -194,6 +218,19 @@ process PLOT_PERM_SC_INT {
     script:
     """
     plot-perm-sc-int.R $perm_sc_quasar_file
+    """
+}
+
+process PLOT_PERM_SC_INT_WITHIN {
+    publishDir "output"
+    //label "high_mem"
+
+    input: val perm_sc_quasar_file
+    output: tuple path("perm-sc-int-within-plot.pdf"), path("perm-sc-int-within-main-plot.pdf")
+
+    script:
+    """
+    plot-perm-sc-int-within.R $perm_sc_quasar_file
     """
 }
 
@@ -212,11 +249,11 @@ process PLOT_PERM_SC_GROUPED {
 }
 
 process PLOT_GROUPED_SC_OUTPUT {
-    label "high_mem"
+    //label "high_mem"
     publishDir "output"
 
     input: val sc_quasar_file
-    output: path("grouped-sc-output-top9-plot.pdf")
+    output: tuple path("grouped-sc-output-top9-plot.pdf"), path("grouped-sc-output-gws-leads.tsv")
 
     script:
     """
@@ -224,11 +261,39 @@ process PLOT_GROUPED_SC_OUTPUT {
     """
 }
 
+process PLOT_SC_INT_FIGURES {
+    publishDir "output"
+
+    input: tuple val(info), path(sc_covs), path(sc_logcounts), path(genotype_dosages)
+    output: path("sc-int-figures.pdf")
+
+    script:
+    """
+    plot-sc-int-figures.R "$sc_covs" "$sc_logcounts" "$genotype_dosages"
+    """
+}
+
+process PLOT_METACELL_OUTPUT {
+    label "high_mem"
+    publishDir "output"
+
+    input:
+        val sc_quasar_file
+        val seacells_file
+    output: path("metacell-output-sizes-plot.pdf")
+
+    script:
+    """
+    plot-metacell-output.R $sc_quasar_file $seacells_file
+    """
+}
+
 process PLOT_SC_INT_OUTPUT {
+    //label "high_mem"
     publishDir "output"
 
     input: val sc_quasar_file
-    output: path("sc-int-eqtl.pdf")
+    output: path("sc-int-eqtl-hits.tsv")
 
     script:
     """
@@ -247,6 +312,18 @@ process PLOT_GWAS_OUTPUT {
     script:
     """
     plot-gwas-output.R $sc_quasar_gwas_file $pb_quasar_gwas_file
+    """
+}
+
+process PLOT_CSAQTL_OUTPUT {
+    publishDir "output"
+
+    input: val csaqtl_quasar_file
+    output: path("csaqtl-output-plot.pdf")
+
+    script:
+    """
+    plot-csaqtl-output.R $csaqtl_quasar_file
     """
 }
 
@@ -356,16 +433,5 @@ process CREATE_EXAMPLE_DATA {
     awk '{print \$2}' ${prefix}.fam | head -n 100 > first_100_ids.txt
     plink2 --bfile $prefix --keep first_100_ids.txt --make-bed --out chr22-n100
     make-example-data.R first_100_ids.txt "$pheno_bed" "$anno"
-    """
-}
-
-process DOWNLOAD_SAIGEQTL_SUPP {
-    
-    output: path("saigeqtl-supp-tables.xlsx")
-
-    script:
-    """
-    curl -L "https://www.medrxiv.org/content/medrxiv/early/2024/05/16/2024.05.15.24307317/DC1/embed/media-1.xlsx?download=true" \
-      -o saigeqtl-supp-tables.xlsx
     """
 }

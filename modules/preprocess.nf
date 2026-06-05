@@ -83,6 +83,20 @@ process CONCAT_BED_FILES {
     """
 }
 
+process EXTRACT_GENOTYPES {
+    conda "$projectDir/envs/extract-genotypes.yaml"
+    label "micro"
+
+    input: val(plink_bed)
+    output: path("genotype-dosages.tsv")
+
+    script:
+    def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
+    """
+    extract-genotypes.py "$prefix"
+    """
+}
+
 process COMPUTE_SC_COUNTS{
     conda "$projectDir/envs/scanpy.yaml"
     label "mega_mem"
@@ -93,6 +107,32 @@ process COMPUTE_SC_COUNTS{
     script:
     """
     compute-sc-counts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties"
+    """
+}
+
+process EXTRACT_SC_LOGCOUNTS {
+    conda "$projectDir/envs/scanpy.yaml"
+    label "mega_mem"
+
+    input: tuple val(info), val(raw_sc_data), val(gene_properties)
+    output: tuple val(info), path("${info.cell_type}-sc-logcounts.tsv")
+
+    script:
+    """
+    extract-sc-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data"
+    """
+}
+
+process COMPUTE_CSAQTL_COUNTS {
+    conda "$projectDir/envs/scanpy.yaml"
+    label "high_mem"
+
+    input: tuple val(info), val(groups), val(h5ad)
+    output: tuple val(info), path("${info.cell_type}-csaqtl-pheno.tsv")
+
+    script:
+    """
+    compute-csaqtl-counts.py "${info.cell_type}" "$groups" "$h5ad"
     """
 }
 
@@ -247,6 +287,19 @@ process PREPARE_SLINGSHOT_ADATA {
     script:
     """
     prepare-slingshot-adata.py "${info.cell_type}" "$raw_sc_data"
+    """
+}
+
+process PREPARE_SEACELLS_ADATA {
+    conda "$projectDir/envs/scanpy.yaml"
+    label "high_mem"
+
+    input: tuple val(info), val(raw_sc_data)
+    output: tuple val(info), path("${info.cell_type.replaceAll(' ', '_')}-seacells-input.h5ad")
+
+    script:
+    """
+    prepare-seacells-adata.py "${info.cell_type}" "$raw_sc_data"
     """
 }
 

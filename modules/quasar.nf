@@ -93,6 +93,22 @@ process COMPUTE_CELL_GROUPS {
     """
 }
 
+process COMPUTE_SEACELLS {
+    conda "$projectDir/envs/seacells.yaml"
+    label "mega_mem"
+    publishDir path: "output", pattern: "*.tsv", mode: "copy"
+
+    input: tuple val(info), path(h5ad)
+    output:
+        tuple val(info), path("${info.cell_type.replaceAll(' ', '_')}-seacells-cell-groups.tsv"), emit: groups
+        tuple val(info), path("${info.cell_type.replaceAll(' ', '_')}-seacells-info.tsv"),        emit: sizes
+
+    script:
+    """
+    compute-seacells.py "$h5ad" "${info.cell_type}"
+    """
+}
+
 process RUN_QUASAR_SC {
     label "sc_quasar"
 
@@ -104,7 +120,8 @@ process RUN_QUASAR_SC {
 
     script:
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
-    def int_flag = (info.int_cov != "none" && info.k == "none") ? "-i ${info.int_cov}" : ""
+    def interaction_cov = info.interaction_cov ?: info.int_cov
+    def int_flag = (info.int_cov != "none" && info.k == "none") ? "-i ${interaction_cov}" : ""
     def cg_flag = (info.k != "none") ? "--cell-groups ${cell_groups}" : ""
     def base = "${info.chr}-${info.cell_type}-${info.int_cov}-K${info.k}"
     """
@@ -115,8 +132,8 @@ process RUN_QUASAR_SC {
       --anno "$anno" \
       --cov "$covs" \
       --out "${base}" \
-      --model                                   p_glmm_sc \
-      --mode                     cis \
+      --model                                                                                    p_glmm_sc \
+      --mode                                        cis \
       ${int_flag} \
       ${cg_flag} \
       --verbose
@@ -193,6 +210,40 @@ process RUN_QUASAR_PB_GWAS {
         "pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-quasar-gwas-variant.txt" >\
         "pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-n-variants.txt"
     rm "pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-quasar-gwas-variant.txt"
+    """
+}
+
+process RUN_CSAQTL_QUASAR {
+    label "sc_quasar_gwas"
+
+    input: tuple val(info), val(pheno_bed), val(covs), val(plink_bed)
+    output: tuple val(info),
+        path("sig-csaqtl-nb_glm-${info.cell_type}-quasar-gwas-variant.txt"),
+        path("csaqtl-nb_glm-${info.cell_type}-time.txt"),
+        path("csaqtl-nb_glm-${info.cell_type}-n-variants.txt")
+
+    script:
+    def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
+    """
+    /usr/bin/time -p -o "csaqtl-nb_glm-${info.cell_type}-time.txt" \
+      /home/jp2045/quasar/build/quasar \
+      -p "$prefix" \
+      -b "$pheno_bed" \
+      -c "$covs" \
+      --out "csaqtl-nb_glm-${info.cell_type}" \
+      --model nb_glm \
+      --mode gwas \
+      --use-apl \
+      --use-quant-res \
+      --verbose
+
+    awk 'BEGIN {FS=OFS="\t"} NR==1 || (toupper(\$10)!="NAN" && (\$10+0) < 5e-6)' \
+        "csaqtl-nb_glm-${info.cell_type}-quasar-gwas-variant.txt" >\
+        "sig-csaqtl-nb_glm-${info.cell_type}-quasar-gwas-variant.txt"
+    awk 'END { print NR-1 }' \
+        "csaqtl-nb_glm-${info.cell_type}-quasar-gwas-variant.txt" >\
+        "csaqtl-nb_glm-${info.cell_type}-n-variants.txt"
+    rm "csaqtl-nb_glm-${info.cell_type}-quasar-gwas-variant.txt"
     """
 }
 

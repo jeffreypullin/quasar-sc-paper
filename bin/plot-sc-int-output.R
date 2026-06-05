@@ -3,31 +3,63 @@
 suppressPackageStartupMessages({
   library(dplyr)
   library(readr)
-  library(data.table)
-  library(ggplot2)
-  library(forcats)
-  library(patchwork)
-  library(qvalue)
-  library(purrr)
-  library(stringr)
   library(tidyr)
-  library(ggh4x)
 })
 
 args <- commandArgs(trailingOnly = TRUE)
 
-sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
-  filter(int_cov == "pseudotime")
+int_cov <- "pseudotime"
+int_beta_col <- paste0("snp_x_", int_cov, "_beta")
+int_se_col <- paste0("snp_x_", int_cov, "_se")
+int_p_col <- paste0("snp_x_", int_cov, "_pvalue")
 
-sc_data_files |>
+sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
+  filter(k == "none", int_cov == !!int_cov)
+
+all_variants <- sc_data_files |>
   rowwise() |>
   mutate(var_data = list(read_tsv(variant_file, show_col_types = FALSE))) |>
   unnest(var_data) |>
-  select(cell_type, feature_id, snp_id, snp_pvalue, snp_x_pseudotime_beta, snp_x_pseudotime_se, snp_x_pseudotime_pvalue) |>
-  arrange(snp_x_pseudotime_pvalue) |>
-  distinct(feature_id, .keep_all = TRUE) |>
-  filter(snp_x_pseudotime_pvalue < 5e-6) |>
-  select(feature_id, snp_pvalue, snp_x_pseudotime_pvalue) |>
-  print(n = 30)
+  ungroup()
 
-2 + "fdjlks"
+output_cols <- c(
+  "hit_type",
+  "cell_type",
+  "feature_id",
+  "snp_id",
+  "snp_beta",
+  "snp_se",
+  "snp_pvalue",
+  int_beta_col,
+  int_se_col,
+  int_p_col
+)
+
+int_hits <- all_variants |>
+  group_by(cell_type, feature_id) |>
+  arrange(.data[[int_p_col]], .by_group = TRUE) |>
+  slice_head(n = 1) |>
+  ungroup() |>
+  filter(.data[[int_p_col]] < 5e-8) |>
+  mutate(hit_type = "interaction") |>
+  select(all_of(output_cols)) |>
+  arrange(.data[[int_p_col]])
+
+main_only_hits <- all_variants |>
+  group_by(cell_type, feature_id) |>
+  arrange(snp_pvalue, .by_group = TRUE) |>
+  slice_head(n = 1) |>
+  ungroup() |>
+  filter(snp_pvalue < 5e-8, .data[[int_p_col]] > 0.5) |>
+  anti_join(
+    int_hits |> select(cell_type, feature_id),
+    by = c("cell_type", "feature_id")
+  ) |>
+  arrange(snp_pvalue) |>
+  slice_head(n = 5) |>
+  mutate(hit_type = "main_only") |>
+  select(all_of(output_cols))
+
+sig_hits <- bind_rows(int_hits, main_only_hits)
+
+write_tsv(sig_hits, "sc-int-eqtl-hits.tsv")

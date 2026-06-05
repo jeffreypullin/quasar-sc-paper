@@ -1,0 +1,8 @@
+name: extract-genotypes
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python
+  - pandas
+  - plink2

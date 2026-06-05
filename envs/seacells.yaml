@@ -1,0 +1,20 @@
+name: seacells
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.9
+  - scanpy
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - numba
+  - python-igraph
+  - leidenalg
+  - pynndescent
+  - tqdm  # SEACells uses tqdm.notebook; patched to std tqdm in bin/compute-seacells.py
+  - matplotlib
+  - pip
+  - pip:
+    - SEACells

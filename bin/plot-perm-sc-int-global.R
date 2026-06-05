@@ -32,7 +32,7 @@ compute_qq_data_int <- function(variant_files, prop_file, int_cov, type) {
   if (type == "main") {
     pvalue_col <- "snp_pvalue"
   } else if (type == "int") {
-    pvalue_col <- paste0("snp_x_", int_cov, "_perm_pvalue")
+    pvalue_col <- paste0("snp_x_", int_cov, "_pvalue")
   }
 
   prop_data <- read_tsv(prop_file, show_col_types = FALSE)
@@ -107,7 +107,7 @@ int_p <- int_plot_data |>
   )
 
 ggsave(
-  "perm-sc-int-plot.pdf",
+  "perm-sc-int-global-plot.pdf",
   int_p,
   width = 12,
   height = 10
@@ -132,7 +132,7 @@ main_p <- main_plot_data |>
   )
 
 ggsave(
-  "perm-sc-int-main-plot.pdf",
+  "perm-sc-int-global-main-plot.pdf",
   main_p,
   width = 12,
   height = 10

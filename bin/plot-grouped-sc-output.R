@@ -21,18 +21,35 @@ variant_data <- sc_data_files |>
   select(cell_type, int_cov, k, var_tbl) |>
   unnest(var_tbl)
 
-top_pairs <- variant_data |>
-  filter(!is.na(group_het_pvalue), !is.na(feature_id), !is.na(snp_id)) |>
-  filter(chrom != "6") |>
-  group_by(feature_id) |>
+gws_pval_threshold <- 5e-8
+
+lead_variants <- variant_data |>
+  filter(!is.na(group_acat_pvalue), !is.na(feature_id), !is.na(snp_id)) |>
+  group_by(cell_type, int_cov, k, feature_id) |>
   arrange(group_acat_pvalue, .by_group = TRUE) |>
   slice_head(n = 1) |>
   ungroup() |>
-  arrange(group_acat_pvalue) |>
-  slice_head(n = 49) |>
+  filter(group_acat_pvalue < gws_pval_threshold) |>
+  arrange(group_acat_pvalue)
+
+write_tsv(lead_variants, "grouped-sc-output-gws-leads.tsv")
+
+plot_feature_id <- "ENSG00000197728"
+
+top_pairs <- variant_data |>
+  filter(
+    feature_id == plot_feature_id,
+    !is.na(group_het_pvalue),
+    !is.na(feature_id),
+    !is.na(snp_id)
+  ) |>
+  group_by(cell_type, int_cov, k) |>
+  arrange(group_linear_pvalue, .by_group = TRUE) |>
+  slice_head(n = 1) |>
+  ungroup() |>
   mutate(
-    pair_label = paste0(feature_id, "\n", snp_id),
-    pair_label = fct_reorder(pair_label, group_acat_pvalue, .desc = TRUE)
+    pair_label = plot_feature_id,
+    line_label = paste0(cell_type, " (", snp_id, ")")
   )
 
 plot_data <- top_pairs |>
@@ -43,6 +60,7 @@ plot_data <- top_pairs |>
     feature_id,
     snp_id,
     pair_label,
+    line_label,
     group_het_pvalue,
     group_linear_pvalue,
     group_acat_pvalue,
@@ -63,23 +81,24 @@ plot_data <- top_pairs |>
   )
 
 p <- plot_data |>
-  ggplot(aes(x = quantile, y = beta, colour = cell_type, group = cell_type)) +
+  ggplot(aes(x = quantile, y = beta, colour = line_label, group = line_label)) +
   geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.3) +
   geom_errorbar(aes(ymin = beta - se, ymax = beta + se), width = 0.15, alpha = 0.8) +
   geom_line(alpha = 0.8) +
   geom_point(size = 1.8) +
-  facet_wrap(~pair_label, ncol = 7, scales = "free_y") +
+  facet_wrap(~pair_label, scales = "free_y") +
   labs(
     x = "Quantile",
     y = "Beta (+/- SE)",
-    colour = "Cell type",
-    title = "Top 9 grouped gene/SNP pairs by group_acat_pvalue"
+    colour = "Cell type (lead SNP)",
+    title = paste0(plot_feature_id, " lead variants by group_linear_pvalue")
   ) +
-  theme_bw()
+  theme_bw() +
+  theme(legend.position = "bottom")
 
 ggsave(
   "grouped-sc-output-top9-plot.pdf",
   p,
-  width = 11,
-  height = 8
+  width = 8,
+  height = 6
 )

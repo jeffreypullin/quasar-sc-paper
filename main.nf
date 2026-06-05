@@ -10,37 +10,47 @@ params.onek1k_cell_types = [
 
 include { 
     EXTRACT_INDIV_IDS ; FILTER_VCF ; CONVERT_VCF_TO_BED ; PRUNE_SNPS ; CONCAT_BED_FILES ;
-    COMPUTE_SC_COUNTS ; COMPUTE_PB_COUNTS ; COMPUTE_CLUSTER_SIZES ; COMPUTE_PB_EXPR_COVS ;
+    EXTRACT_GENOTYPES ; COMPUTE_SC_COUNTS ; EXTRACT_SC_LOGCOUNTS ; COMPUTE_PB_COUNTS ; COMPUTE_CLUSTER_SIZES ; COMPUTE_PB_EXPR_COVS ;
     COMPUTE_SC_EXPR_COVS ; COMPUTE_GENOTYPE_PCS ; CREATE_ANNOT_BED ; COMPUTE_PB_LOGCOUNTS ;
-    CREATE_GRM ; PREPARE_SLINGSHOT_ADATA ; RUN_SLINGSHOT ; JOIN_SC_INT_COVS ; JOIN_PB_INT_COVS ;
-    COMPUTE_STARCAT_COVS
+    CREATE_GRM ; PREPARE_SLINGSHOT_ADATA ; PREPARE_SEACELLS_ADATA ; RUN_SLINGSHOT ; JOIN_SC_INT_COVS ; JOIN_PB_INT_COVS ;
+    COMPUTE_STARCAT_COVS ; COMPUTE_CSAQTL_COUNTS
 } from './modules/preprocess'
 include { COLLATE_SAIGEQTL_INPUT ; SAIGE_SUBSET_BED ; EXTRACT_GENES ; 
           RUN_SAIGEQTL ; CONCAT_SAIGEQTL_TSVS ; COMPUTE_SAIGEQTL_POWER } from './modules/saige-qtl'
 include { COMBINE_PB_COVS ; COMBINE_SC_COVS ; FILTER_COVS ; ANNOTATE_PHENO ; 
           RUN_QUASAR_PB ; RUN_QUASAR_SC ; FILTER_VARIANTS ; RUN_QUASAR_SC_GWAS ;
-          RUN_QUASAR_PB_GWAS ; COMPUTE_CELL_GROUPS } from './modules/quasar'
+          RUN_QUASAR_PB_GWAS ; COMPUTE_CELL_GROUPS ; COMPUTE_SEACELLS ;
+          RUN_CSAQTL_QUASAR } from './modules/quasar'
+include { COMPUTE_CELL_GROUPS as COMPUTE_PSEUDOTIME_GROUPS } from './modules/quasar'
 include { FILTER_VARIANTS as FILTER_VARIANTS_SC } from './modules/quasar'
 include { FILTER_VARIANTS as FILTER_VARIANTS_PB } from './modules/quasar'
 include { FILTER_VARIANTS as FILTER_VARIANTS_PB_INT } from './modules/quasar'
+include { FILTER_VARIANTS as FILTER_VARIANTS_SC_INT } from './modules/quasar'
+include { FILTER_VARIANTS as FILTER_VARIANTS_SC_INT_WITHIN } from './modules/quasar'
 include { COMPUTE_QUASAR_POWER as COMPUTE_QUASAR_POWER_SC } from './modules/quasar'
 include { COMPUTE_QUASAR_POWER as COMPUTE_QUASAR_POWER_PB } from './modules/quasar'
 include { RUN_QUASAR_PB as RUN_QUASAR_PB_PERM } from './modules/quasar'
 include { RUN_QUASAR_SC as RUN_QUASAR_SC_PERM } from './modules/quasar'
 include { RUN_QUASAR_PB as RUN_QUASAR_PB_PERM_INT } from './modules/quasar'
+include { RUN_QUASAR_SC as RUN_QUASAR_SC_PERM_INT } from './modules/quasar'
+include { RUN_QUASAR_SC as RUN_QUASAR_SC_PERM_WITHIN_INT } from './modules/quasar'
 include { RUN_QUASAR_PB_GWAS as RUN_QUASAR_PB_GWAS_PERM } from './modules/quasar'
 include { RUN_QUASAR_SC_GWAS as RUN_QUASAR_SC_GWAS_PERM } from './modules/quasar'
+include { PERMUTE_COV as PERMUTE_SC_COV } from './modules/analysis'
 include { 
     PERMUTE_BED ; PLOT_POWER ; PLOT_CONVERGENCE ; 
     PLOT_PERM ; PLOT_PERM_PB ; PLOT_TIME ; PLOT_CONCORDANCE ;
     COMPUTE_GENE_PROPERTIES ; PLOT_GENE_PROPERTIES ; PLOT_PERM_INT ;
     PLOT_INT_OUTPUT ; PLOT_GWAS_OUTPUT ; CREATE_EXAMPLE_DATA ;
-    PLOT_PERM_GLOBAL ; PERMUTE_COV ; DOWNLOAD_SAIGEQTL_SUPP ; PLOT_PERM_GWAS ;
-    PLOT_PVALUE_SCATTER ; PLOT_SC_INT_OUTPUT ; PLOT_PERM_SC_INT ; CLUMP_VARIANTS ;
-    PLOT_CLUMPED ; PLOT_PERM_SC_GROUPED ; PLOT_GROUPED_SC_OUTPUT
+    PLOT_PERM_GLOBAL ; PERMUTE_COV ; PLOT_PERM_GWAS ;
+    PLOT_PVALUE_SCATTER ; PLOT_SC_INT_OUTPUT ; PLOT_PERM_SC_INT ; PLOT_PERM_SC_INT_WITHIN ;
+    //CLUMP_VARIANTS ;
+    PLOT_PERM_SC_GROUPED ; PLOT_GROUPED_SC_OUTPUT ; PLOT_PERM_SC_INT_GLOBAL ;
+    //PLOT_CLUMPED ;
+    PERMUTE_SC_COV_WITHIN ; PLOT_SC_INT_FIGURES ; PLOT_METACELL_OUTPUT ; PLOT_CSAQTL_OUTPUT
     } from './modules/analysis'
-include { CLUMP_VARIANTS as CLUMP_VARIANTS_PB } from "./modules/analysis"
-include { CLUMP_VARIANTS as CLUMP_VARIANTS_SC } from "./modules/analysis"
+//include { CLUMP_VARIANTS as CLUMP_VARIANTS_PB } from "./modules/analysis"
+//include { CLUMP_VARIANTS as CLUMP_VARIANTS_SC } from "./modules/analysis"
 include { PERMUTE_BED as PERMUTE_BED_GWAS} from './modules/analysis'
 include { COMPUTE_CONVERGENCE as COMPUTE_CONVERGENCE_PB } from './modules/analysis'
 include { COMPUTE_CONVERGENCE as COMPUTE_CONVERGENCE_SC } from './modules/analysis'
@@ -80,13 +90,11 @@ workflow {
             return [info]
         }
 
-    // Add additional combined cell types.
     cell_infos = cell_infos.mix(
         channel.fromList([
             [cell_type: 'B_all', cell_frac: 1.0d, indiv_frac: 1.0d],
             [cell_type: 'CD4_T_all', cell_frac: 1.0d, indiv_frac: 1.0d],
             [cell_type: 'CD8_T_all', cell_frac: 1.0d, indiv_frac: 1.0d],
-            [cell_type: 'T_all', cell_frac: 1.0d, indiv_frac: 1.0d],
         ])
     )
 
@@ -195,6 +203,18 @@ workflow {
     slingshot_adata = PREPARE_SLINGSHOT_ADATA(slingshot_input)
     slingshot_out = RUN_SLINGSHOT(slingshot_adata)
 
+    // SEACells metacells for all full-fraction clusters (independent of slingshot).
+    seacells_input = cell_infos
+        .filter { it.cell_frac == 1.0d && it.indiv_frac == 1.0d }
+        .filter { !(it.cell_type in ["Plasma", "CD4 SOX4"]) }
+        .combine(Channel.of(params.onek1k_raw_single_cell_data))
+    seacells_adata = PREPARE_SEACELLS_ADATA(seacells_input)
+    seacells_out = COMPUTE_SEACELLS(seacells_adata)
+    seacells_groups = seacells_out.groups
+
+    // Cell-state abundance QTL phenotypes are computed later (after join_sc_pseudo_out
+    // is available) so that B_all can use pseudotime-based cell groups.
+
     // Pseudobulk B_all pseudotime: aggregate per-cell pseudotime to per-sample mean
     // and append to the pb cov file.
     pb_covs_b_all = pb_covs.filter {
@@ -290,6 +310,45 @@ workflow {
     join_sc_pseudo_out = joined_sc_int_covs.filter { it[0].cell_type == "B_all" }
     join_sc_starcat_out = joined_sc_int_covs.filter { starcat_cell_types.contains(it[0].cell_type) }
 
+    // Cell-state abundance QTL: per-individual cell-group counts -> nb_glm GWAS.
+    // For B_all, bin cells by pseudotime rather than SEACells metacells.
+    b_all_pseudotime_groups_input = join_sc_pseudo_out
+        .filter { it[0].cell_type == "B_all" }
+        .map { info, covs ->
+            tuple(
+                [cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac,
+                 int_cov: "pseudotime", k: 5],
+                covs
+            )
+        }
+    b_all_pseudotime_groups = COMPUTE_PSEUDOTIME_GROUPS(b_all_pseudotime_groups_input)
+        .map { info, cg ->
+            tuple([cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac], cg)
+        }
+
+    csaqtl_cell_groups = seacells_groups
+        .filter { it[0].cell_type != "B_all" }
+        .mix(b_all_pseudotime_groups)
+
+    csaqtl_pheno = COMPUTE_CSAQTL_COUNTS(
+        csaqtl_cell_groups.combine(seacells_adata, by: 0)
+    )
+
+    csaqtl_quasar_input = csaqtl_pheno
+        .combine(
+            pb_covs.filter {
+                it[0].cell_frac == 1.0d &&
+                it[0].indiv_frac == 1.0d
+            },
+            by: 0
+        )
+        .combine(all_bed)
+        .map { info, pheno, covs, bed ->
+            tuple(info, pheno, covs, bed)
+        }
+
+    csaqtl_quasar = RUN_CSAQTL_QUASAR(csaqtl_quasar_input)
+
     sc_quasar_input_core = sc_counts
         .combine(sc_covs, by: 0)
         .combine(anno_bed)
@@ -338,9 +397,16 @@ workflow {
     //sc_quasar_input = sc_quasar_input_core.mix(sc_quasar_input_b_all_pseudo)
     //sc_quasar_input = sc_quasar_input_b_all_pseudo.mix(sc_quasar_input_starcat)
     //sc_quasar_input = sc_quasar_input_core
-    sc_quasar_input = sc_quasar_input_starcat
+    //sc_quasar_input = sc_quasar_input_starcat
+    //sc_quasar_input = sc_quasar_input_b_all_pseudo
+    sc_quasar_input = sc_quasar_input_core.filter { it[0].cell_type == "CD4_T_all" }
 
-    sc_cell_group_k = Channel.of("none", 3)
+    // Cell groups for the single-cell quasar. Three modes, selected by sc_cell_group_k:
+    //   - "none"    : no aggregation; quasar runs per-cell (optionally with -i interaction).
+    //   - "seacells": precomputed SEACells metacells (independent of any covariate).
+    //   - integer k : equal-width bins along an interaction covariate (e.g. pseudotime),
+    //                 only valid when an interaction covariate is set.
+    sc_cell_group_k = Channel.of("seacells")
 
     sc_quasar_input_with_k = sc_quasar_input
         .combine(sc_cell_group_k)
@@ -348,28 +414,43 @@ workflow {
             tuple(info + [k: k], sc_pheno, covs, anno, plink)
         }
 
-    sc_in_no_groups = sc_quasar_input_with_k.filter { it[0].k == "none" }
-    sc_in_with_groups = sc_quasar_input_with_k.filter { it[0].k != "none" }
-
-    sc_cell_groups = COMPUTE_CELL_GROUPS(
-        sc_in_with_groups.map { info, sc_pheno, covs, anno, plink -> tuple(info, covs) }
-    )
-
-    sc_in_with_groups_full = sc_in_with_groups
-        .combine(sc_cell_groups, by: 0)
-        .map { info, sc_pheno, covs, anno, plink, cg ->
-            tuple(info, sc_pheno, covs, anno, plink, cg)
-        }
-
-    sc_in_no_groups_full = sc_in_no_groups
+    // No-groups branch: pass covs as a placeholder in the cell_groups slot (unused).
+    sc_no_groups_full = sc_quasar_input_with_k
+        .filter { it[0].k == "none" }
         .map { info, sc_pheno, covs, anno, plink ->
             tuple(info, sc_pheno, covs, anno, plink, covs)
         }
 
-    sc_quasar_input_full = sc_in_with_groups_full.mix(sc_in_no_groups_full)
-      .filter({it[0].k == 3})
-      .filter({it[0].chr != "chr1"})
-      .filter({it[0].chr == "chr22" || it[0].chr == "chr21"})
+    // SEACells branch: join each cell type to its precomputed metacell groups.
+    sc_seacells_full = sc_quasar_input_with_k
+        .filter { it[0].k == "seacells" }
+        .map { info, sc_pheno, covs, anno, plink ->
+            def base = [cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac]
+            tuple(base, info, sc_pheno, covs, anno, plink)
+        }
+        .combine(seacells_groups, by: 0)
+        .map { base, info, sc_pheno, covs, anno, plink, cg ->
+            tuple(info, sc_pheno, covs, anno, plink, cg)
+        }
+
+    // Interaction-covariate binning branch: only when an interaction covariate exists.
+    sc_binned_in = sc_quasar_input_with_k
+        .filter { it[0].k != "none" && it[0].k != "seacells" && it[0].int_cov != "none" }
+
+    sc_binned_groups = COMPUTE_CELL_GROUPS(
+        sc_binned_in.map { info, sc_pheno, covs, anno, plink -> tuple(info, covs) }
+    )
+
+    sc_binned_full = sc_binned_in
+        .combine(sc_binned_groups, by: 0)
+        .map { info, sc_pheno, covs, anno, plink, cg ->
+            tuple(info, sc_pheno, covs, anno, plink, cg)
+        }
+
+    sc_quasar_input_full = sc_no_groups_full
+        .mix(sc_seacells_full)
+        .mix(sc_binned_full)
+        .filter({!(it[0].chr in ["chr1"])})
 
     sc_quasar = RUN_QUASAR_SC(sc_quasar_input_full)
 
@@ -385,6 +466,21 @@ workflow {
     sc_quasar = COMPUTE_QUASAR_POWER_SC(sc_quasar)
     sc_quasar = COMPUTE_CONVERGENCE_SC(sc_quasar)
 
+    //sc_logcounts = EXTRACT_SC_LOGCOUNTS(
+    //    sc_input.filter { it[0].cell_frac == 1.0d && it[0].indiv_frac == 1.0d }
+    //)
+    //genotype_dosages = EXTRACT_GENOTYPES(all_bed)
+
+    //sc_logcounts_for_figures = sc_logcounts
+    //    .map { info, logcounts -> tuple(info.cell_type, logcounts) }
+    //sc_int_figures_input = join_sc_pseudo_out
+    //    .map { info, covs -> tuple(info.cell_type, info, covs) }
+    //    .combine(sc_logcounts_for_figures, by: 0)
+    //    .combine(genotype_dosages)
+    //    .map { cell_type, info, covs, logcounts, geno ->
+    //        tuple(info, covs, logcounts, geno)
+    //    }
+
     pb_quasar_file = Channel
         .of("model\tcell_type\tchr\tcell_frac\tindiv_frac\tint_cov\tpb_type\tregion_file\tvariant_file\ttime_file\tpower_file\tconv_file\tgene_prop_file")
         .concat(pb_quasar
@@ -392,12 +488,7 @@ workflow {
                 "${info.model}\t${info.cell_type}\t${info.chr}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${pb_type}\t${region_file}\t${variant_file}\t${time_file}\t${power_file}\t${conv_file}\t${gene_prop_file}"
             }
         )
-        .collectFile(
-            name: 'pb_quasar_file',
-            newLine: true,
-            sort: false,
-            storeDir: "${projectDir}/data/intermediate"
-        )
+        .collectFile(name: 'pb_quasar_file', newLine: true, sort: false)
     
     sc_quasar_file = Channel
         .of("cell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tpower_file\tconv_file\tgene_prop_file")
@@ -406,43 +497,53 @@ workflow {
                 "${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${power_file}\t${conv_file}\t${gene_prop_file}"
             }
         )
+        .collectFile(name: 'sc_quasar_file', newLine: true, sort: false)
+
+    seacells_file = Channel
+        .of("cell_type\tgroups_file\tinfo_file")
+        .concat(seacells_groups
+            .combine(seacells_out.sizes, by: 0)
+            .map { info, cg, sizes ->
+                "${info.cell_type}\t${cg}\t${sizes}"
+            }
+        )
         .collectFile(
-            name: 'sc_quasar_file',
+            name: 'seacells_file',
             newLine: true,
             sort: false,
             storeDir: "${projectDir}/data/intermediate"
         )
 
     // Clumping analysis.
-    clumped_pb_quasar = CLUMP_VARIANTS_PB(pb_quasar.filter{it[0].int_cov == "none"}, all_bed)
-    clumped_pb_quasar_file = Channel
-        .of("model\tcell_type\tchr\tcell_frac\tindiv_frac\tint_cov\tpb_type\tregion_file\tvariant_file\ttime_file\tpower_file\tconv_file\tgene_prop_file\tclumped_file")
-        .concat(clumped_pb_quasar
-            .map { info, region_file, variant_file, time_file, gene_prop_file, power_file, conv_file, clumped_file ->
-                "${info.model}\t${info.cell_type}\t${info.chr}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${pb_type}\t${region_file}\t${variant_file}\t${time_file}\t${power_file}\t${conv_file}\t${gene_prop_file}\t${clumped_file}"
-            }
-        )
-        .collectFile(
-            name: 'clumped_pb_quasar_file',
-            newLine: true,
-            sort: false,
-            storeDir: "${projectDir}/data/intermediate"
-        )
+    //clumped_pb_quasar = CLUMP_VARIANTS_PB(pb_quasar.filter{it[0].int_cov == "none"}, all_bed)
+    //clumped_pb_quasar_file = Channel
+    //    .of("model\tcell_type\tchr\tcell_frac\tindiv_frac\tint_cov\tpb_type\tregion_file\tvariant_file\ttime_file\tpower_file\tconv_file\tgene_prop_file\tclumped_file")
+    //    .concat(clumped_pb_quasar
+    //        .map { info, region_file, variant_file, time_file, gene_prop_file, power_file, conv_file, clumped_file ->
+    //            "${info.model}\t${info.cell_type}\t${info.chr}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${pb_type}\t${region_file}\t${variant_file}\t${time_file}\t${power_file}\t${conv_file}\t${gene_prop_file}\t${clumped_file}"
+    //        }
+    //    )
+    //    .collectFile(
+    //        name: 'clumped_pb_quasar_file',
+    //        newLine: true,
+    //        sort: false,
+    //        storeDir: "${projectDir}/data/intermediate"
+    //    )
 
-    clumped_sc_quasar = CLUMP_VARIANTS_SC(sc_quasar.filter{it[0].int_cov == "none"}, all_bed)
-    clumped_sc_quasar_file = Channel
-        .of("cell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tpower_file\tconv_file\tgene_prop_file\tclumped_file")
-        .concat(clumped_sc_quasar
-            .map { info, region_file, variant_file, time_file, gene_prop_file, power_file, conv_file, clumped_file ->
-                "${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${power_file}\t${conv_file}\t${gene_prop_file}\t${clumped_file}"
-            }
-        )
-        .collectFile(
-            name: 'clumped_sc_quasar_file',
-            newLine: true,
-            sort: false,
-            storeDir: "${projectDir}/data/intermediate"
-        )
+    //clumped_sc_quasar = CLUMP_VARIANTS_SC(sc_quasar.filter{it[0].int_cov == "none"}, all_bed)
+    //clumped_sc_quasar_file = Channel
+    //    .of("cell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tpower_file\tconv_file\tgene_prop_file\tclumped_file")
+    //    .concat(clumped_sc_quasar
+    //        .map { info, region_file, variant_file, time_file, gene_prop_file, power_file, conv_file, clumped_file ->
+    //            "${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${power_file}\t${conv_file}\t${gene_prop_file}\t${clumped_file}"
+    //        }
+    //    )
+    //    .collectFile(
+    //        name: 'clumped_sc_quasar_file',
+    //        newLine: true,
+    //        sort: false,
+    //        storeDir: "${projectDir}/data/intermediate"
+    //    )
 
     // GWAS analysis.
 
@@ -452,21 +553,23 @@ workflow {
         .filter({it[0].cell_type == "B IN"})
         .combine(Channel.from(1..22))
         .map { info, sc_pheno, covs, anno, bed, pheno_chr ->
-         tuple(info + [pheno_chr: pheno_chr as int], sc_pheno, covs, anno, bed)
+          tuple(info + [pheno_chr: pheno_chr as int], sc_pheno, covs, anno, bed)
         }
-        .filter({it[0].pheno_chr== 1.0d})
+        .filter({it[0].pheno_chr == 1.0d})
+
     sc_quasar_gwas = RUN_QUASAR_SC_GWAS(sc_quasar_gwas_input)
 
     pb_quasar_gwas_input = pb_quasar_input
         .filter({it[0].indiv_frac == 1.0d && it[0].cell_frac == 1.0d})
-        .filter({it[0].cell_type =="B IN"})
+        .filter({it[0].cell_type == "B IN"})
         .filter({it[0].int_cov == "none"})
         .filter({it[0].model == "nb_glm"})
         .combine(Channel.from(1..22))
         .map { info, pheno, covs, bed, grm, pheno_chr ->
           tuple(info + [pheno_chr: pheno_chr as int], pheno, covs, bed)
         }
-        .filter({it[0].pheno_chr== 1.0d})
+        .filter({it[0].pheno_chr == 1.0d})
+
     pb_quasar_gwas = RUN_QUASAR_PB_GWAS(pb_quasar_gwas_input)
 
     sc_quasar_gwas_file = Channel
@@ -476,12 +579,7 @@ workflow {
                 "${info.cell_type}\t${info.chr}\tchr${info.pheno_chr}\t${sig_variant_file}\t${time_file}\t${n_variants_file}"
             }
         )
-        .collectFile(
-            name: 'sc_quasar_gwas_file',
-            newLine: true,
-            sort: false,
-            storeDir: "${projectDir}/data/intermediate"
-        )
+        .collectFile(name: 'sc_quasar_gwas_file', newLine: true, sort: false)
 
     pb_quasar_gwas_file = Channel
         .of("cell_type\tmodel\tgeno_chr\tpheno_chr\tsig_variant_file\ttime_file\tn_variants")
@@ -490,13 +588,17 @@ workflow {
                 "${info.cell_type}\t${info.model}\t${info.chr}\tchr${info.pheno_chr}\t${sig_variant_file}\t${time_file}\t${n_variants_file}"
             }
         )
-        .collectFile(
-            name: 'pb_quasar_gwas_file',
-            newLine: true,
-            sort: false,
-            storeDir: "${projectDir}/data/intermediate"
+        .collectFile(name: 'pb_quasar_gwas_file', newLine: true, sort: false)
+
+    csaqtl_quasar_file = Channel
+        .of("cell_type\tgeno_chr\tsig_variant_file\ttime_file\tn_variants")
+        .concat(csaqtl_quasar
+            .map { info, sig_variant_file, time_file, n_variants_file ->
+                "${info.cell_type}\t${info.chr}\t${sig_variant_file}\t${time_file}\t${n_variants_file}"
+            }
         )
-    
+        .collectFile(name: 'csaqtl_quasar_file',newLine: true, sort: false)
+
     // Genotype permutation analysis.
     rep_bed_files = bed_files
       //.combine(channel.of(1..10))
@@ -507,7 +609,7 @@ workflow {
       .filter( {it[0].cell_type in ["Plasma", "B IN", "CD4 NC", "B_all", "CD4_T_all", "CD8_T_all"]})
       .filter( {it[0].cov_spec == "bulk_pca" })
       .filter( {it[0].int_cov in ["none", "pseudotime"] + starcat_int_covs})
-      .filter( {it[0].k in ["none", 3, 10]})
+      .filter( {it[0].k in ["none", 5]})
       .map { info, sc_pheno, covs, anno, bed, cg ->
         tuple(info.chr, info, sc_pheno, covs, anno, bed, cg)
        }
@@ -697,6 +799,112 @@ workflow {
             storeDir: "${projectDir}/data/intermediate"
         )
 
+    rep_sc_cov_files = join_sc_pseudo_out
+      .combine(channel.of(1..2))
+      .map { info, covs, ind ->
+        tuple("pseudotime", info.cell_type, covs, ind)
+      }
+
+    permute_sc_covs = PERMUTE_SC_COV(rep_sc_cov_files)
+
+    perm_int_sc_quasar_input = sc_quasar_input_full
+      .filter { it[0].cell_type == "B_all" && it[0].int_cov == "pseudotime" && it[0].k == "none" }
+      .map { info, sc_pheno, covs, anno, bed, cg ->
+        tuple(info.int_cov, info.cell_type, info, sc_pheno, covs, anno, bed, cg)
+      }
+      .combine(permute_sc_covs, by: [0, 1])
+      .map { int_cov, cell_type, info, sc_pheno, covs, anno, bed, cg, perm_cov ->
+        tuple(info + [interaction_cov: "${info.int_cov}_perm"], sc_pheno, perm_cov, anno, bed, cg)
+      }
+
+    perm_int_sc_quasar = RUN_QUASAR_SC_PERM_INT(perm_int_sc_quasar_input)
+
+    perm_int_sc_quasar_filt = perm_int_sc_quasar
+      .map { info, region_file, variant_file, time_file ->
+        tuple(info.chr, info, region_file, variant_file, time_file)
+      }
+      .combine(pruned_snps, by: 0)
+      .map { chr, info, region_file, variant_file, time_file, prune_in ->
+        tuple(info, region_file, variant_file, time_file, prune_in)
+      }
+      | FILTER_VARIANTS_SC_INT
+
+    perm_int_sc_quasar_filt = perm_int_sc_quasar_filt
+       .map { info, region_file, variant_file, time_file ->
+         tuple([cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac], info, region_file, variant_file, time_file)
+       }
+       .combine(gene_properties, by: 0)
+       .map { base_info, info, region_file, variant_file, time_file, prop_file ->
+         tuple(info, region_file, variant_file, time_file, prop_file)
+       }
+
+    sc_quasar_perm_int_file = Channel
+        .of("cell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tprop_file")
+        .concat(perm_int_sc_quasar_filt
+            .map { info, region_file, variant_file, time_file, prop_file ->
+                "${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${prop_file}"
+            }
+        )
+        .collectFile(
+            name: 'sc_quasar_perm_int_file',
+            newLine: true,
+            sort: false,
+            storeDir: "${projectDir}/data/intermediate"
+        )
+
+    rep_sc_cov_files_within = join_sc_pseudo_out
+      .combine(channel.of(1..2))
+      .map { info, covs, ind ->
+        tuple("pseudotime", info.cell_type, covs, ind)
+      }
+
+    permute_sc_covs_within = PERMUTE_SC_COV_WITHIN(rep_sc_cov_files_within)
+
+    perm_int_sc_quasar_within_input = sc_quasar_input_full
+      .filter { it[0].cell_type == "B_all" && it[0].int_cov == "pseudotime" && it[0].k == "none" }
+      .map { info, sc_pheno, covs, anno, bed, cg ->
+        tuple(info.int_cov, info.cell_type, info, sc_pheno, covs, anno, bed, cg)
+      }
+      .combine(permute_sc_covs_within, by: [0, 1])
+      .map { int_cov, cell_type, info, sc_pheno, covs, anno, bed, cg, perm_cov ->
+        tuple(info + [interaction_cov: "${info.int_cov}_perm"], sc_pheno, perm_cov, anno, bed, cg)
+      }
+
+    perm_int_sc_quasar_within = RUN_QUASAR_SC_PERM_WITHIN_INT(perm_int_sc_quasar_within_input)
+
+    perm_int_sc_quasar_within_filt = perm_int_sc_quasar_within
+      .map { info, region_file, variant_file, time_file ->
+        tuple(info.chr, info, region_file, variant_file, time_file)
+      }
+      .combine(pruned_snps, by: 0)
+      .map { chr, info, region_file, variant_file, time_file, prune_in ->
+        tuple(info, region_file, variant_file, time_file, prune_in)
+      }
+      | FILTER_VARIANTS_SC_INT_WITHIN
+
+    perm_int_sc_quasar_within_filt = perm_int_sc_quasar_within_filt
+       .map { info, region_file, variant_file, time_file ->
+         tuple([cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac], info, region_file, variant_file, time_file)
+       }
+       .combine(gene_properties, by: 0)
+       .map { base_info, info, region_file, variant_file, time_file, prop_file ->
+         tuple(info, region_file, variant_file, time_file, prop_file)
+       }
+
+    sc_quasar_perm_int_within_file = Channel
+        .of("cell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tprop_file")
+        .concat(perm_int_sc_quasar_within_filt
+            .map { info, region_file, variant_file, time_file, prop_file ->
+                "${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${prop_file}"
+            }
+        )
+        .collectFile(
+            name: 'sc_quasar_perm_int_within_file',
+            newLine: true,
+            sort: false,
+            storeDir: "${projectDir}/data/intermediate"
+        )
+
     perm_sc_quasar_file = Channel
         .of("cell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tprop_file")
         .concat(perm_sc_quasar_filt
@@ -726,7 +934,6 @@ workflow {
         )
 
     // Analysis. 
-    saige_qtl_supp_tables = DOWNLOAD_SAIGEQTL_SUPP()
 
     //PLOT_CLUMPED(clumped_pb_quasar_file, clumped_sc_quasar_file)
     //PLOT_POWER(pb_quasar_file, sc_quasar_file, saigeqtl_file)
@@ -738,9 +945,14 @@ workflow {
     //PLOT_PERM_INT(perm_int_pb_quasar_file)
     //PLOT_INT_OUTPUT(pb_quasar_file)
     //PLOT_SC_INT_OUTPUT(sc_quasar_file)
-    PLOT_GROUPED_SC_OUTPUT(sc_quasar_file)
-    PLOT_PERM_SC_GROUPED(perm_sc_quasar_file)
-    //PLOT_PERM_SC_INT(perm_sc_quasar_file)
+    //PLOT_GROUPED_SC_OUTPUT(sc_quasar_file)
+    //PLOT_PERM_SC_GROUPED(perm_sc_quasar_file)
+    //PLOT_PERM_SC_INT_GLOBAL(perm_sc_quasar_file)
+    //PLOT_PERM_SC_INT(sc_quasar_perm_int_file)
+    //PLOT_SC_INT_FIGURES(sc_int_figures_input)
+    //PLOT_METACELL_OUTPUT(sc_quasar_file, seacells_file)
+    //PLOT_CSAQTL_OUTPUT(csaqtl_quasar_file)
+    //PLOT_PERM_SC_INT_WITHIN(sc_quasar_perm_int_within_file)
     //PLOT_TIME(pb_quasar_file, sc_quasar_file, saigeqtl_file, saige_qtl_supp_tables)
     //PLOT_CONCORDANCE(pb_quasar_file, sc_quasar_file, saigeqtl_file)
     //PLOT_GENE_PROPERTIES(gene_properties_file)
