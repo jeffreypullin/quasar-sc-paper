@@ -26,6 +26,7 @@ cov_names = {
 
 cell_label = sys.argv[1]
 adata = sc.read_h5ad(sys.argv[2])
+starcat_cache = sys.argv[3] if len(sys.argv) > 3 else "cache"
 
 subset = adata[cell_label_mask(adata.obs["cell_label"], cell_label).to_numpy(), :].copy()
 
@@ -35,7 +36,7 @@ subset = subset[:, keep_genes.to_numpy()].copy()
 subset.var_names = gene_symbols[keep_genes].to_numpy()
 subset.var_names_make_unique()
 
-usage, _ = starCAT(reference="TCAT.V1").fit_transform(subset)
+usage, _ = starCAT(reference="TCAT.V1", cachedir=starcat_cache).fit_transform(subset)
 
 covs = usage[score_cols].copy()
 covs = covs.apply(pd.to_numeric, errors="coerce")

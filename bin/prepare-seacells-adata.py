@@ -9,7 +9,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "code"))
 from cell_label_subset import cell_label_mask  # noqa: E402
 
 cell_type = sys.argv[1]
-cell_type_safe = cell_type.replace(" ", "_")
 adata = sc.read_h5ad(sys.argv[2])
 
 subset = adata[
@@ -24,4 +23,4 @@ sc.tl.pca(subset)
 
 subset.obs = subset.obs[["cell_label", "individual"]].copy()
 
-subset.write_h5ad(f"{cell_type_safe}-seacells-input.h5ad")
+subset.write_h5ad(f"{cell_type}-seacells-input.h5ad")

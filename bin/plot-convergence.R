@@ -14,7 +14,14 @@ args <- commandArgs(trailingOnly = TRUE)
 
 pb_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
   filter(int_cov == "none")
-sc_data_files <- read_tsv(args[2], show_col_types = FALSE)
+sc_data_files <- read_tsv(args[2], show_col_types = FALSE) |>
+  filter(int_cov == "none") |>
+  filter(k == "none")
+saigeqtl_data_files <- read_tsv(args[3], show_col_types = FALSE)
+
+saigeqtl_data_files
+
+2 + "fdsml"
 
 sc_n_na_data <- sc_data_files |>
   filter(cell_frac == 1) |>
@@ -36,35 +43,11 @@ pb_n_na_data <- pb_data_files |>
   ungroup() |>
   summarise(n_na = sum(n_na), .by = c(cell_type, model))
 
-sc_n_zero_data <- sc_data_files |>
-  filter(cell_frac == 1) |>
-  filter(indiv_frac == 1) |>
+saigeqtl_n_na_data <- saigeqtl_data_files |>
   rowwise() |>
-  mutate(n_zero = read_tsv(conv_file, show_col_types = FALSE) |>
-    filter(pvalue == 0) |>
-    nrow()) |>
+  mutate(n_na = count_na_variant_files(error_genes)) |>
   ungroup() |>
-  summarise(n_zero = sum(n_zero), .by = cell_type)
-
-sc_n_zero_data <- sc_data_files |>
-  filter(cell_frac == 1) |>
-  filter(indiv_frac == 1) |>
-  rowwise() |>
-  mutate(n_zero = read_tsv(conv_file, show_col_types = FALSE) |>
-    filter(pvalue == 0) |>
-    nrow()) |>
-  ungroup() |>
-  summarise(n_zero = sum(n_zero), .by = cell_type)
-
-pb_n_zero_data <- pb_data_files |>
-  filter(cell_frac == 1) |>
-  filter(indiv_frac == 1) |>
-  rowwise() |>
-  mutate(n_zero = read_tsv(conv_file, show_col_types = FALSE) |>
-    filter(pvalue == 0) |>
-    nrow()) |>
-  ungroup() |>
-  summarise(n_zero = sum(n_zero), .by = c(cell_type, model))
+  summarise(n_na = sum(n_na), .by = cell_type)
 
 sc_n_non_converged_data <- sc_data_files |>
   filter(cell_frac == 1) |>
@@ -91,7 +74,9 @@ p_na <- bind_rows(
   pb_n_na_data |>
     mutate(type = paste0("pb-", model)),
   sc_n_na_data |>
-    mutate(type = "sc")
+    mutate(type = "sc"),
+  saigeqtl_n_na_data |>
+    mutate(type = "saigeqtl")
 ) |>
   mutate(cell_type = fct_reorder(factor(cell_type), n_na)) |>
   ggplot(aes(cell_type, n_na, fill = type)) +

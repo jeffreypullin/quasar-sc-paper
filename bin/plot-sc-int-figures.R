@@ -13,8 +13,8 @@ sc_covs_file <- args[1]
 sc_logcounts_file <- args[2]
 genotype_file <- args[3]
 
-gene_id <- "ENSG00000132507"
-variant_id <- "17:7207964A-C"
+gene_id <- "ENSG00000143297"
+variant_id <- "1:157530620T-C"
 
 sc_covs <- read_tsv(sc_covs_file, show_col_types = FALSE)
 sc_logcounts <- read_tsv(sc_logcounts_file, show_col_types = FALSE)
@@ -53,7 +53,7 @@ p1 <- plot_df |>
   theme_bw()
 
 n_bins <- 5
-use_quantile <- FALSE
+use_quantile <- TRUE
 
 pt_vals <- plot_df$pseudotime
 if (length(pt_vals) == 0 || !all(is.finite(range(pt_vals)))) {
@@ -161,6 +161,7 @@ p2 <- bin_plot_df |>
   ) +
   geom_smooth(method = "lm", se = FALSE, linewidth = 1, colour = "black") +
   scale_x_continuous(breaks = sort(unique(bin_plot_df$dosage))) +
+  coord_cartesian(ylim = c(0, 0.75)) +
   facet_wrap(~pt_bin_label, nrow = 1) +
   labs(
     x = "Genotype dosage",
@@ -172,7 +173,7 @@ fig_title <- sprintf("%s\n%s", gene_id, variant_id)
 
 ggsave(
   "sc-int-figures.pdf",
-  p2 / p1 + plot_annotation(title = fig_title),
+  p2,
   width = 14,
   height = 14
 )

@@ -14,6 +14,8 @@ suppressPackageStartupMessages({
   library(ggh4x)
 })
 
+source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
+
 args <- commandArgs(trailingOnly = TRUE)
 
 sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
@@ -104,7 +106,8 @@ int_p <- int_plot_data |>
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)",
     colour = "Source"
-  )
+  ) +
+  theme_jp()
 
 ggsave(
   "perm-sc-int-plot.pdf",
@@ -127,9 +130,9 @@ main_p <- main_plot_data |>
   facet_wrap(~source + cell_type + int_cov) +
   labs(
     x = "Expected -log10(p-value)",
-    y = "Observed -log10(p-value)",
-    colour = "Source"
-  )
+    y = "Observed -log10(p-value)"
+  ) +
+  theme_jp()
 
 ggsave(
   "perm-sc-int-main-plot.pdf",

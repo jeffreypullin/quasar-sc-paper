@@ -57,7 +57,6 @@ RNG = np.random.default_rng(42)
 
 h5ad_file = sys.argv[1]
 cell_type = sys.argv[2]
-cell_type_safe = cell_type.replace(" ", "_")
 
 adata = sc.read_h5ad(h5ad_file)
 
@@ -105,7 +104,7 @@ else:
 pd.DataFrame({
     "group": adata.obs["SEACell"].values,
     "cell_id": adata.obs_names,
-}).to_csv(f"{cell_type_safe}-seacells-cell-groups.tsv", sep="\t", index=False)
+}).to_csv(f"{cell_type}-seacells-cell-groups.tsv", sep="\t", index=False)
 
 # Compute UMAP on the full adata to obtain per-metacell coordinates.
 sc.pp.neighbors(adata, use_rep="X_pca")
@@ -135,5 +134,5 @@ n_cells = (
     .sort_index()
     .rename_axis("metacell")
     .reset_index()
-    .to_csv(f"{cell_type_safe}-seacells-info.tsv", sep="\t", index=False)
+    .to_csv(f"{cell_type}-seacells-info.tsv", sep="\t", index=False)
 )

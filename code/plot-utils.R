@@ -49,6 +49,6 @@ method_lookup <- c(
 
 cell_type_cols <- c(
   "Plasma" = "#66CCEE",
-  "B IN" = "#228833",
-  "CD4 NC" = "#EE6677"
+  "B_IN" = "#228833",
+  "CD4_NC" = "#EE6677"
 )

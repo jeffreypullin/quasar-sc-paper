@@ -1,0 +1,31 @@
+class Utils {
+
+    static attachGeneProperties(ch, gene_properties) {
+        ch
+            .map { info, region, variant, time ->
+                [[dataset: info.dataset, cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac],
+                 info, region, variant, time]
+            }
+            .combine(
+                gene_properties.map { info, gp ->
+                    [[dataset: info.dataset, cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac], gp]
+                },
+                by: 0
+            )
+            .map { base, info, region, variant, time, gp -> [info, region, variant, time, gp] }
+    }
+
+    static combineWithPrunedSnps(ch, pruned_snps) {
+        ch
+            .map { info, region_file, variant_file, time_file ->
+                [[info.dataset, info.chr], info, region_file, variant_file, time_file]
+            }
+            .combine(
+                pruned_snps.map { dataset, chr, prune_in -> [[dataset, chr], prune_in] },
+                by: 0
+            )
+            .map { key, info, region_file, variant_file, time_file, prune_in ->
+                [info, region_file, variant_file, time_file, prune_in]
+            }
+    }
+}

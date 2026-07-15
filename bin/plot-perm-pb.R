@@ -20,18 +20,18 @@ pb_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
   filter(int_cov == "none")
 
 #b_in_prop_data <- pb_data_files |>
-#  filter(cell_type == "B IN") |>
+#  filter(cell_type == "B_IN") |>
 #  slice(1) |>
 #  pull(prop_file) |>
 #  read_tsv(show_col_types = FALSE) |>
-#  mutate(cell_type = "B IN")
+#  mutate(cell_type = "B_IN")
 
 #cd4_nc_prop_data <- pb_data_files |>
-#  filter(cell_type == "CD4 NC") |>
+#  filter(cell_type == "CD4_NC") |>
 #  slice(1) |>
 #  pull(prop_file) |>
 #  read_tsv(show_col_types = FALSE) |>
-#  mutate(cell_type = "CD4 NC")
+#  mutate(cell_type = "CD4_NC")
 
 #plasma_prop_data <- pb_data_files |>
 #  filter(cell_type == "Plasma") |>
@@ -205,7 +205,7 @@ ggsave(
 
 #pb_cell_frac_p <- pb_cell_frac_plot_data |>
 #  mutate(cell_type = factor(cell_type,
-#                            levels = c("CD4 NC", "B IN", "Plasma"))) |>
+#                            levels = c("CD4_NC", "B_IN", "Plasma"))) |>
 #  ggplot(aes(log_x_bin_mid, log_y_pvalue,
 #             ymin = log_lower_ci, ymax = log_upper_ci)) +
 #  geom_point(alpha = 0.8) +

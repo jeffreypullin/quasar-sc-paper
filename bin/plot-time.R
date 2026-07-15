@@ -14,6 +14,8 @@ suppressPackageStartupMessages({
   library(readxl)
 })
 
+source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
+
 read_time <- function(path) {
   data <- read.delim(path)
   raw_str <- colnames(data)
@@ -26,7 +28,6 @@ args <- commandArgs(trailingOnly = TRUE)
 pb_data_files <- read_tsv(args[1], show_col_types = FALSE)
 sc_data_files <- read_tsv(args[2], show_col_types = FALSE)
 saigeqtl_data_files <- read_tsv(args[3], show_col_types = FALSE)
-#saigeqtl_supp_time_data_raw <- read_excel(args[4], sheet = 2)
 
 saigeqtl_time_data <- saigeqtl_data_files |>
   filter(variant_file != "NA") |>
@@ -34,21 +35,8 @@ saigeqtl_time_data <- saigeqtl_data_files |>
     step1_time = sum(step1_time),
     step2_time = sum(step2_time),
     .by = cell_type) |>
-  mutate(cell_type = str_replace_all(cell_type, "-", " ")) |>
   mutate(time = step1_time + step2_time) |>
   mutate(cell_frac = 1, indiv_frac = 1)
-
-#saigeqtl_supp_time_data <- saigeqtl_supp_time_data_raw |>
-#  select(1, 4, 6) |>
-#  setNames(c("cell_type", "step1_time", "step2_time")) |>
-#  slice(-c(1, 2)) |>
-#  mutate(cell_type = str_replace_all(cell_type, "_", " ")) |>
-#  mutate(
-#    step1_time = as.numeric(step1_time) * 60 * 60,
-#    step2_time = as.numeric(step2_time) * 60 * 60,
-#  ) |>
-#  mutate(time = step1_time + step2_time) |>
-#  mutate(cell_frac = 1, indiv_frac = 1)
 
 sc_time_data <- sc_data_files |>
   filter(indiv_frac == 1) |>
@@ -73,15 +61,12 @@ plot_data <- bind_rows(
   pb_time_data |>
     mutate(type = paste0("pb-", model)) |>
     select(-model),
-  #saigeqtl_supp_time_data |>
-  #  mutate(type = "saigeqtl_supp")
 )
 
 quasar_p <- plot_data |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
   filter(type != "saigeqtl") |>
-  #filter(type != "saigeqtl_supp") |>
   mutate(cell_type = fct_reorder(factor(cell_type), time)) |>
   ggplot(aes(cell_type, time, fill = type)) +
   geom_col(position = "dodge2") +
@@ -99,12 +84,30 @@ comparison_p <- plot_data |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
   mutate(cell_type = fct_reorder(factor(cell_type), time)) |>
-  #filter(cell_type %in% c("Plasma", "B IN")) |>
+  filter(cell_type %in% c("Plasma", "B_IN", "CD4_NC")) |>
   filter(type %in% c("sc", "saigeqtl")) |>
+  mutate(
+    type = case_when(
+      type == "sc" ~ "quasar",
+      type == "saigeqtl" ~ "SAIGE-QTL",
+    )
+  ) |>
   ggplot(aes(cell_type, time, fill = type)) +
   geom_col(position = "dodge2") +
   coord_flip() +
-  scale_y_continuous(labels = label_timespan())
+  scale_y_continuous(
+    labels = label_timespan(),
+    breaks = breaks_width(24 * 60 * 60)
+  ) +
+  labs(
+    x = "Cell type",
+    y = "Time",
+    fill = "Method"
+  ) +
+  scale_fill_manual(
+    values = c("quasar" = "#228833", "SAIGE-QTL" = "#66CCEE")
+  ) +
+  theme_jp_vgrid()
 
 ggsave(
   "time-method-comparison-plot.pdf",
@@ -113,14 +116,9 @@ ggsave(
   height = 10
 )
 
-#frac_p <- sc_time_data |>
-#  filter(cell_type == "CD4 NC") |>
-#  ggplot(aes(cell_frac, time)) +
-#  geom_point()
-
 ggsave(
   "time-frac-plot.pdf",
-  comparison_p,,
+  comparison_p,
   width = 12,
   height = 10
 )

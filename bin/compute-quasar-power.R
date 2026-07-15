@@ -25,7 +25,6 @@ n_sig_variant_data <- variant_data |>
       select(feature_id, pb_non_zero_frac),
     by = "feature_id"
   ) |>
-  filter(pb_non_zero_frac > 0.1) |>
   summarise(n_sig_variant = sum(.data[[pvalue_col]] < 5e-6, na.rm = TRUE))
 
 out_file <- paste0(chrom, "-", cell_type, "-n-sig-variants.tsv")

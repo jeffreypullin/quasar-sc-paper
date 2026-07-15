@@ -55,8 +55,7 @@ all_clumps <- bind_rows(
 )
 
 all_clumps <- all_clumps |>
-  mutate(cell_type = str_replace_all(cell_type, "-", " ")) |>
-  filter(cell_type %in% c("Plasma", "B IN", "CD4 NC")) |>
+  filter(cell_type %in% c("Plasma", "B_IN", "CD4_NC")) |>
   filter(!(data_type == "pseudobulk" & !method %in% c("nb_glm", "lm"))) |>
   mutate(
     type = if_else(data_type == "pseudobulk", paste0("pb-", method), "single-cell")

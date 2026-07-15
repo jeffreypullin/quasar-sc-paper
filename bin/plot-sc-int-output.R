@@ -8,13 +8,13 @@ suppressPackageStartupMessages({
 
 args <- commandArgs(trailingOnly = TRUE)
 
-int_cov <- "pseudotime"
+int_cov <- "starcat_cytotoxic"
 int_beta_col <- paste0("snp_x_", int_cov, "_beta")
 int_se_col <- paste0("snp_x_", int_cov, "_se")
 int_p_col <- paste0("snp_x_", int_cov, "_pvalue")
 
 sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
-  filter(k == "none", int_cov == !!int_cov)
+  filter(k == "none", int_cov == "starcat_Cytotoxic")
 
 all_variants <- sc_data_files |>
   rowwise() |>

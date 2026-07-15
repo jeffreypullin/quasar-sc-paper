@@ -1,40 +1,4 @@
 
-process PERMUTE_BED {
-
-    input: tuple val(chr), val(plink_bed), val(ind)
-    output: tuple val(chr), path("permute-${chr}.bed")
-
-    script:
-    def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
-    """
-    permute-fam.R ${prefix}.fam ${chr} ${ind}
-    cp ${prefix}.bim ./"permute-${chr}.bim"
-    cp ${prefix}.bed ./"permute-${chr}.bed"
-    """
-}
-
-process PERMUTE_COV {
-
-    input: tuple val(int_cov), val(cell_type), val(cov), val(ind)
-    output: tuple val(int_cov), val(cell_type), path("permute-${cell_type}-${int_cov}-${ind}.tsv")
-
-    script:
-    """
-    permute-cov.R "$ind" "$cell_type" "$int_cov" "$cov"
-    """
-}
-
-process PERMUTE_SC_COV_WITHIN {
-
-    input: tuple val(int_cov), val(cell_type), val(cov), val(ind)
-    output: tuple val(int_cov), val(cell_type), path("permute-within-${cell_type}-${int_cov}-${ind}.tsv")
-
-    script:
-    """
-    permute-sc-cov-within.R "$ind" "$cell_type" "$int_cov" "$cov"
-    """
-}
-
 process PLOT_POWER {
     publishDir "output"
 
@@ -43,7 +7,6 @@ process PLOT_POWER {
         val sc_quasar_file
         val saigeqtl_file
     output: tuple path("power-method-comparison-plot.pdf"), 
-        path("power-cov-spec-plot.pdf"),
         path("power-frac-plot.pdf"),
         path("power-sc-non-zero-frac-plot.pdf")
 
@@ -53,16 +16,32 @@ process PLOT_POWER {
     """
 }
 
-process COMPUTE_CONVERGENCE {
-    //label "nano"
-    
-    input: tuple val(info), val(region_file), val(variant_file), val(time_file), val(gene_properties_files), val(power_file)
-    output: tuple val(info), val(region_file), val(variant_file), val(time_file), val(gene_properties_files), val(power_file),
-        path("${info.chr}-${info.cell_type}-problem-variants.tsv")
+process PLOT_POWER_COVS {
+    publishDir "output"
+
+    input:
+        val sc_quasar_file
+    output:
+        tuple path("power-cov-spec-plot.pdf"),
+              path("power-cov-spec-gene-plot.pdf"),
+              path("power-int-cov-plot.pdf")
 
     script:
     """
-    compute-convergence.R "${info.chr}" "${info.cell_type}" "${info.int_cov}" "$variant_file" "$gene_properties_files"
+    plot-power-covs.R $sc_quasar_file
+    """
+}
+
+process COMPUTE_CONVERGENCE {
+    label "nano"
+    
+    input: tuple val(info), val(region_file), val(variant_file), val(time_file), val(gene_properties_files), val(power_file)
+    output: tuple val(info), val(region_file), val(variant_file), val(time_file), val(gene_properties_files), val(power_file),
+        path("${info.dataset}-${info.chr}-${info.cell_type}-problem-variants.tsv")
+
+    script:
+    """
+    compute-convergence.R "${info.dataset}" "${info.chr}" "${info.cell_type}" "${info.int_cov}" "$variant_file" "$gene_properties_files"
     """    
 }
 
@@ -70,10 +49,9 @@ process CLUMP_VARIANTS {
     label "long_nano"
 
     input:
-        tuple val(info), val(region_file), val(variant_file), val(time_file), val(gene_prop_file), val(power_file), val(conv_file)
-        val all_bed
+        tuple val(info), val(region_file), val(variant_file), val(time_file), val(gene_prop_file), val(power_file), val(conv_file), val(all_bed)
     output: tuple val(info), val(region_file), val(variant_file), val(time_file), val(gene_prop_file), val(power_file), val(conv_file), 
-        path("${info.chr}-${info.cell_type}-${info.int_cov}-harmonised-clumps.tsv")
+        path("${info.dataset}-${info.chr}-${info.cell_type}-${info.int_cov}-harmonised-clumps.tsv")
 
     script:
     def prefix = all_bed.getParent().toString() + '/' + all_bed.getSimpleName()
@@ -93,24 +71,28 @@ process CLUMP_VARIANTS {
     done
 
     harmonise-clump-files.R "${info.chr}" "${info.cell_type}" "${info.int_cov}"
+    mv "${info.chr}-${info.cell_type}-${info.int_cov}-harmonised-clumps.tsv" "${info.dataset}-${info.chr}-${info.cell_type}-${info.int_cov}-harmonised-clumps.tsv"
     """
 }
 
 process PLOT_CONVERGENCE {
     publishDir "output"
+    label "high_mem"
 
     input: 
         val pb_quasar_file
         val sc_quasar_file
+        val saigeqtl_file
     output: path("convergence-plot.pdf")
 
     script:
     """
-    plot-convergence.R $pb_quasar_file $sc_quasar_file
+    plot-convergence.R $pb_quasar_file $sc_quasar_file $saigeqtl_file
     """
 }
 
 process PLOT_PERM {
+    label "high_mem"
     publishDir "output"
 
     input: val perm_sc_quasar_file
@@ -249,7 +231,7 @@ process PLOT_PERM_SC_GROUPED {
 }
 
 process PLOT_GROUPED_SC_OUTPUT {
-    //label "high_mem"
+    label "high_mem"
     publishDir "output"
 
     input: val sc_quasar_file
@@ -289,7 +271,7 @@ process PLOT_METACELL_OUTPUT {
 }
 
 process PLOT_SC_INT_OUTPUT {
-    //label "high_mem"
+    label "high_mem"
     publishDir "output"
 
     input: val sc_quasar_file
@@ -327,6 +309,22 @@ process PLOT_CSAQTL_OUTPUT {
     """
 }
 
+process PLOT_PC_GWAS_OUTPUT {
+    label "high_mem"
+    publishDir "output"
+
+    input: val pc_gwas_file
+    output:
+        tuple path("pc-gwas-B_IN-plot.pdf"),
+        path("pc-gwas-CD4_NC-plot.pdf"),
+        path("pc-gwas-gws-leads.tsv")
+
+    script:
+    """
+    plot-pc-gwas-output.R $pc_gwas_file
+    """
+}
+
 process PLOT_PVALUE_SCATTER {
     publishDir "output"
     label "high_mem"
@@ -343,6 +341,20 @@ process PLOT_PVALUE_SCATTER {
     """
 }
 
+process PLOT_MAIN_VS_INT {
+    publishDir "output"
+    label "high_mem"
+
+    input: val sc_quasar_file
+
+    output: path("main-vs-int-*-plot.pdf")
+
+    script:
+    """
+    plot-main-vs-int.R $sc_quasar_file
+    """
+}
+
 process PLOT_TIME {
     publishDir "output"
 
@@ -350,14 +362,13 @@ process PLOT_TIME {
         val pb_quasar_file
         val sc_quasar_file
         val saigeqtl_file
-        val saigeqtl_supp_tables
     output: tuple path("time-quasar-plot.pdf"), 
         path("time-method-comparison-plot.pdf"),
         path("time-frac-plot.pdf")
 
     script:
     """
-    plot-time.R $pb_quasar_file $sc_quasar_file $saigeqtl_file $saigeqtl_supp_tables
+    plot-time.R $pb_quasar_file $sc_quasar_file $saigeqtl_file
     """ 
 }
 
@@ -398,11 +409,12 @@ process COMPUTE_GENE_PROPERTIES {
     input:
         tuple val(info), val(adata)
         val anno_file
-    output: tuple val(info), path("${info.cell_type}-gene-properties.tsv")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-gene-properties.tsv")
 
     script:
     """
     compute-gene-properties.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$adata" "$anno_file"
+    mv "${info.cell_type}-gene-properties.tsv" "${info.dataset}-${info.cell_type}-gene-properties.tsv"
     """
 }
 
@@ -433,5 +445,17 @@ process CREATE_EXAMPLE_DATA {
     awk '{print \$2}' ${prefix}.fam | head -n 100 > first_100_ids.txt
     plink2 --bfile $prefix --keep first_100_ids.txt --make-bed --out chr22-n100
     make-example-data.R first_100_ids.txt "$pheno_bed" "$anno"
+    """
+}
+
+process RUN_COLOC {
+    publishDir "output"
+
+    input: val sc_quasar_file
+    output: path("coloc-results.tsv")
+
+    script:
+    """
+    run-coloc.R $sc_quasar_file
     """
 }

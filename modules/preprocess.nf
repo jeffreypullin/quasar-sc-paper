@@ -2,12 +2,13 @@
 process EXTRACT_INDIV_IDS {
     conda "$projectDir/envs/scanpy.yaml"
 
-    input: val raw_sc_data
-    output: path("indiv-ids.txt")
+    input: tuple val(dataset), val(raw_sc_data)
+    output: tuple val(dataset), path("${dataset}-indiv-ids.txt")
 
     script: 
     """
     extract-indiv-ids.py $raw_sc_data
+    mv indiv-ids.txt "${dataset}-indiv-ids.txt"
     """
 }
 
@@ -15,9 +16,8 @@ process FILTER_VCF {
     conda "$projectDir/envs/cli.yaml"
 
     input: 
-        tuple val(chr), val(vcf)
-        val sample_file
-    output: tuple val(chr), path("filt-${chr}.vcf.gz"), path("filt-${chr}.vcf.gz.tbi")
+        tuple val(dataset), val(chr), val(vcf), val(sample_file)
+    output: tuple val(dataset), val(chr), path("${dataset}-filt-${chr}.vcf.gz"), path("${dataset}-filt-${chr}.vcf.gz.tbi")
 
     shell:
     """
@@ -28,8 +28,8 @@ process FILTER_VCF {
         --recode \
         --recode-INFO-all \
         --stdout \
-        --stdout | bgzip -c > "filt-${chr}.vcf.gz"
-    tabix -p vcf "filt-${chr}.vcf.gz"
+        --stdout | bgzip -c > "${dataset}-filt-${chr}.vcf.gz"
+    tabix -p vcf "${dataset}-filt-${chr}.vcf.gz"
     """
 }
 
@@ -37,15 +37,15 @@ process CONVERT_VCF_TO_BED {
     conda "$projectDir/envs/cli.yaml"
     label "tiny"
 
-    input: tuple val(chr), val(vcf), val(vcf_tbi)
-    output: tuple val(chr), path("${chr}.bed")
+    input: tuple val(dataset), val(chr), val(vcf), val(vcf_tbi)
+    output: tuple val(dataset), val(chr), path("${dataset}-${chr}.bed")
 
     shell:
     '''
     plink2 --vcf !{vcf} \
         --set-all-var-ids '@:#$r-$a' \
         --make-bed \
-        --out !{chr} \
+        --out !{dataset}-!{chr} \
         --const-fid
     '''
 }
@@ -53,8 +53,8 @@ process CONVERT_VCF_TO_BED {
 process PRUNE_SNPS {
     conda "$projectDir/envs/cli.yaml"
 
-    input: tuple val(chr), val(plink_bed)
-    output: tuple val(chr), path("${chr}.prune.in")
+    input: tuple val(dataset), val(chr), val(plink_bed)
+    output: tuple val(dataset), val(chr), path("${dataset}-${chr}.prune.in")
 
     script:
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
@@ -63,7 +63,7 @@ process PRUNE_SNPS {
       --bfile "$prefix" \
       --indep-pairwise 250 100 0.3 \
       --rm-dup exclude-mismatch \
-      --out "${chr}" \
+      --out "${dataset}-${chr}" \
       --const-fid
     """
 }
@@ -72,14 +72,14 @@ process CONCAT_BED_FILES {
     conda "$projectDir/envs/cli.yaml"
     label "tiny"
 
-    input: val bed_files
-    output: path("all.bed")
+    input: tuple val(dataset), val(bed_files)
+    output: tuple val(dataset), path("${dataset}-all.bed")
 
     script:
     """
     printf "%s\\n" $bed_files | tr -d '[],' | sort -V -t/ -k9 > all_bed_files.txt
     awk -F. '{print \$1".bed", \$1".bim", \$1".fam"}' all_bed_files.txt > all_files.txt
-    plink --keep-allele-order --merge-list all_files.txt --make-bed --out all
+    plink --keep-allele-order --merge-list all_files.txt --make-bed --out ${dataset}-all
     """
 }
 
@@ -87,13 +87,14 @@ process EXTRACT_GENOTYPES {
     conda "$projectDir/envs/extract-genotypes.yaml"
     label "micro"
 
-    input: val(plink_bed)
-    output: path("genotype-dosages.tsv")
+    input: tuple val(dataset), val(plink_bed)
+    output: tuple val(dataset), path("${dataset}-genotype-dosages.tsv")
 
     script:
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
     """
     extract-genotypes.py "$prefix"
+    mv genotype-dosages.tsv "${dataset}-genotype-dosages.tsv"
     """
 }
 
@@ -102,11 +103,12 @@ process COMPUTE_SC_COUNTS{
     label "mega_mem"
 
     input: tuple val(info), val(raw_sc_data), val(gene_properties)
-    output: tuple val(info), path("${info.cell_type}-sc-pheno.tsv")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-sc-pheno.tsv")
 
     script:
     """
     compute-sc-counts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties"
+    mv "${info.cell_type}-sc-pheno.tsv" "${info.dataset}-${info.cell_type}-sc-pheno.tsv"
     """
 }
 
@@ -115,11 +117,12 @@ process EXTRACT_SC_LOGCOUNTS {
     label "mega_mem"
 
     input: tuple val(info), val(raw_sc_data), val(gene_properties)
-    output: tuple val(info), path("${info.cell_type}-sc-logcounts.tsv")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-sc-logcounts.tsv")
 
     script:
     """
     extract-sc-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data"
+    mv "${info.cell_type}-sc-logcounts.tsv" "${info.dataset}-${info.cell_type}-sc-logcounts.tsv"
     """
 }
 
@@ -128,11 +131,26 @@ process COMPUTE_CSAQTL_COUNTS {
     label "high_mem"
 
     input: tuple val(info), val(groups), val(h5ad)
-    output: tuple val(info), path("${info.cell_type}-csaqtl-pheno.tsv")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-csaqtl-pheno.tsv")
 
     script:
     """
     compute-csaqtl-counts.py "${info.cell_type}" "$groups" "$h5ad"
+    mv "${info.cell_type}-csaqtl-pheno.tsv" "${info.dataset}-${info.cell_type}-csaqtl-pheno.tsv"
+    """
+}
+
+process COMPUTE_SC_PC_PHENO {
+    conda "$projectDir/envs/scanpy.yaml"
+    label "high_mem"
+
+    input: tuple val(info), val(raw_sc_data)
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-sc-pc-pheno.tsv")
+
+    script:
+    """
+    compute-sc-pc-pheno.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data"
+    mv "${info.cell_type}-sc-pc-pheno.tsv" "${info.dataset}-${info.cell_type}-sc-pc-pheno.tsv"
     """
 }
 
@@ -141,11 +159,12 @@ process COMPUTE_PB_COUNTS{
     label "high_mem"
 
     input: tuple val(info), val(raw_sc_data), val(gene_properties)
-    output: tuple val("counts"), val(info), path("${info.cell_type}-pb-pheno.tsv")
+    output: tuple val("counts"), val(info), path("${info.dataset}-${info.cell_type}-pb-pheno.tsv")
 
     script:
     """
     compute-pb-counts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties"
+    mv "${info.cell_type}-pb-pheno.tsv" "${info.dataset}-${info.cell_type}-pb-pheno.tsv"
     """
 }
 
@@ -154,11 +173,12 @@ process COMPUTE_PB_LOGCOUNTS{
     label "high_mem"
 
     input: tuple val(info), val(raw_sc_data), val(gene_properties)
-    output: tuple val("logcounts"), val(info), path("${info.cell_type}-pb-pheno.tsv")
+    output: tuple val("logcounts"), val(info), path("${info.dataset}-${info.cell_type}-pb-pheno.tsv")
 
     script:
     """
     compute-pb-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties"
+    mv "${info.cell_type}-pb-pheno.tsv" "${info.dataset}-${info.cell_type}-pb-pheno.tsv"
     """
 }
 
@@ -167,12 +187,13 @@ process COMPUTE_CLUSTER_SIZES{
     label "high_mem"
     publishDir "output"
     
-    input: val raw_sc_data
-    output: path("cluster-sizes.tsv")
+    input: tuple val(dataset), val(raw_sc_data)
+    output: tuple val(dataset), path("${dataset}-cluster-sizes.tsv")
 
     script:
     """
-    compute-cluster-sizes.py "$raw_sc_data" 
+    compute-cluster-sizes.py "$raw_sc_data"
+    mv cluster-sizes.tsv "${dataset}-cluster-sizes.tsv"
     """
 }
 
@@ -181,11 +202,12 @@ process COMPUTE_PB_EXPR_COVS{
     label "high_mem"
 
     input: tuple val(info), val(raw_sc_data), val(gene_properties)
-    output: tuple val(info), path("${info.cell_type}-expr-covs.tsv")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-expr-covs.tsv")
 
     script:
     """
     compute-pb-expr-covs.py "${info.cell_type}" "$raw_sc_data"
+    mv "${info.cell_type}-expr-covs.tsv" "${info.dataset}-${info.cell_type}-expr-covs.tsv"
     """
 }
 
@@ -194,11 +216,32 @@ process COMPUTE_SC_EXPR_COVS{
     label "high_mem"
 
     input: tuple val(info), val(raw_sc_data), val(gene_properties)
-    output: tuple val(info), path("${info.cell_type}-expr-covs.tsv")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-expr-covs.tsv")
 
     script:
     """
     compute-sc-expr-covs.py "${info.cell_type}" "$raw_sc_data"
+    mv "${info.cell_type}-expr-covs.tsv" "${info.dataset}-${info.cell_type}-expr-covs.tsv"
+    """
+}
+
+process DOWNLOAD_STARCAT_REF {
+    conda "$projectDir/envs/starcat.yaml"
+    label "long_nano"
+    storeDir "$projectDir/data/reference/starcat-cache"
+
+    input: val(url)
+    output: path("starcat-cache")
+
+    script:
+    """
+    mkdir -p starcat-cache
+    if [ ! -f starcat-cache/TCAT.V1/TCAT.V1.reference.tsv ]; then
+        wget --tries=10 --timeout=120 --waitretry=60 \\
+            -O TCAT.V1.tar.gz "$url"
+        tar -xzf TCAT.V1.tar.gz -C starcat-cache
+        rm TCAT.V1.tar.gz
+    fi
     """
 }
 
@@ -207,12 +250,14 @@ process COMPUTE_STARCAT_COVS{
     label "high_mem"
     publishDir "output", pattern: "*.pdf", mode: "copy"
 
-    input: tuple val(info), val(raw_sc_data), val(gene_properties)
-    output: tuple val(info), path("${info.cell_type}-starcat-covs.tsv"), path("${info.cell_type}-starcat-score-plots.pdf")
+    input: tuple val(info), val(raw_sc_data), val(gene_properties), path(starcat_cache)
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-starcat-covs.tsv"), path("${info.dataset}-${info.cell_type}-starcat-score-plots.pdf")
 
     script:
     """
-    compute-starcat-covs.py "${info.cell_type}" "$raw_sc_data"
+    compute-starcat-covs.py "${info.cell_type}" "$raw_sc_data" "$starcat_cache"
+    mv "${info.cell_type}-starcat-covs.tsv" "${info.dataset}-${info.cell_type}-starcat-covs.tsv"
+    mv "${info.cell_type}-starcat-score-plots.pdf" "${info.dataset}-${info.cell_type}-starcat-score-plots.pdf"
     """
 }
 
@@ -220,8 +265,8 @@ process COMPUTE_GENOTYPE_PCS {
     conda "$projectDir/envs/cli.yaml"
     label "micro"
 
-    input: val bed
-    output: path("geno-pcs.txt")
+    input: tuple val(dataset), val(bed)
+    output: tuple val(dataset), path("${dataset}-geno-pcs.txt")
 
     script:
     def prefix = "${bed.getParent().toString() + '/' + bed.getSimpleName()}"
@@ -233,7 +278,7 @@ process COMPUTE_GENOTYPE_PCS {
     cat plink2.eigenvec | \
       sed '1s/IID/sample_id/' | \
       sed '1s/PC/geno_pc/g' | \
-      cut -f2- > geno-pcs.txt
+      cut -f2- > ${dataset}-geno-pcs.txt
     """
 }
 
@@ -265,8 +310,8 @@ process CREATE_GRM {
     conda "$projectDir/envs/cli.yaml"
     label "micro"
     
-    input: val bed
-    output: path("grm.tsv")
+    input: tuple val(dataset), val(bed)
+    output: tuple val(dataset), path("${dataset}-grm.tsv")
 
     script:
     def prefix = "${bed.getParent().toString() + '/' + bed.getSimpleName()}"
@@ -274,6 +319,7 @@ process CREATE_GRM {
     plink2 --bfile $prefix --indep-pairwise 250 50 0.2 --out onek1k_pruning_info --threads 2
     plink2 --bfile $prefix --extract onek1k_pruning_info.prune.in --make-king square --out king_ibd_out --threads 2
     process-grm.R onek1k
+    mv grm.tsv "${dataset}-grm.tsv"
     """
 }
 
@@ -282,11 +328,12 @@ process PREPARE_SLINGSHOT_ADATA {
     label "high_mem"
 
     input: tuple val(info), val(raw_sc_data)
-    output: tuple val(info), path("${info.cell_type}-slingshot-input.h5ad")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-slingshot-input.h5ad")
 
     script:
     """
     prepare-slingshot-adata.py "${info.cell_type}" "$raw_sc_data"
+    mv "${info.cell_type}-slingshot-input.h5ad" "${info.dataset}-${info.cell_type}-slingshot-input.h5ad"
     """
 }
 
@@ -295,11 +342,12 @@ process PREPARE_SEACELLS_ADATA {
     label "high_mem"
 
     input: tuple val(info), val(raw_sc_data)
-    output: tuple val(info), path("${info.cell_type.replaceAll(' ', '_')}-seacells-input.h5ad")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-seacells-input.h5ad")
 
     script:
     """
     prepare-seacells-adata.py "${info.cell_type}" "$raw_sc_data"
+    mv "${info.cell_type}-seacells-input.h5ad" "${info.dataset}-${info.cell_type}-seacells-input.h5ad"
     """
 }
 
@@ -310,13 +358,16 @@ process RUN_SLINGSHOT {
 
     input: tuple val(info), path(h5ad)
     output:
-        tuple path("${info.cell_type}-pseudotime.tsv"),
-        path("${info.cell_type}-slingshot.pdf"),
-        path("${info.cell_type}-slingshot-celltype.pdf")
+        tuple val(info), path("${info.dataset}-${info.cell_type}-pseudotime.tsv"),
+        path("${info.dataset}-${info.cell_type}-slingshot.pdf"),
+        path("${info.dataset}-${info.cell_type}-slingshot-celltype.pdf")
 
     script:
     """
     run-slingshot.R "$h5ad" "${info.cell_type}"
+    mv "${info.cell_type}-pseudotime.tsv" "${info.dataset}-${info.cell_type}-pseudotime.tsv"
+    mv "${info.cell_type}-slingshot.pdf" "${info.dataset}-${info.cell_type}-slingshot.pdf"
+    mv "${info.cell_type}-slingshot-celltype.pdf" "${info.dataset}-${info.cell_type}-slingshot-celltype.pdf"
     """
 }
 
@@ -324,11 +375,12 @@ process JOIN_SC_INT_COVS {
     label "micro"
 
     input: tuple val(info), path(expr_covs), path(int_cov)
-    output: tuple val(info), path("${info.cell_type}-cov-data-with-int-cov.tsv")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-cov-data-with-int-cov.tsv")
 
     script:
     """
     join-sc-int-covs.R "${info.cell_type}" "$expr_covs" "$int_cov" 
+    mv "${info.cell_type}-cov-data-with-int-cov.tsv" "${info.dataset}-${info.cell_type}-cov-data-with-int-cov.tsv"
     """
 }
 
@@ -336,10 +388,11 @@ process JOIN_PB_INT_COVS {
     label "micro"
 
     input: tuple val(info), path(pb_covs), path(sc_expr_covs), path(int_cov)
-    output: tuple val(info), path("${info.cell_type}-pb-cov-data-with-int-cov.tsv")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-pb-cov-data-with-int-cov.tsv")
 
     script:
     """
     join-pb-int-covs.R "${info.cell_type}" "$pb_covs" "$sc_expr_covs" "$int_cov"
+    mv "${info.cell_type}-pb-cov-data-with-int-cov.tsv" "${info.dataset}-${info.cell_type}-pb-cov-data-with-int-cov.tsv"
     """
 }

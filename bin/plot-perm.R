@@ -14,6 +14,8 @@ suppressPackageStartupMessages({
   library(ggh4x)
 })
 
+source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
+
 args <- commandArgs(trailingOnly = TRUE)
 
 sc_data_files <- read_tsv(args[1], show_col_types = FALSE)
@@ -157,6 +159,7 @@ overall_plot_data <- sc_data_files |>
   unnest(cols = qq_data)
 
 overall_p <- overall_plot_data |>
+  filter(cell_type != "B_all") |>
   ggplot(aes(log_x_bin_mid, log_y_pvalue,
              ymin = log_lower_ci, ymax = log_upper_ci,
              colour = cell_type)) +
@@ -168,7 +171,8 @@ overall_p <- overall_plot_data |>
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)",
     colour = "Cell type"
-  )
+  ) + 
+  theme_jp()
 
 ggsave(
   "perm-overall-plot.pdf",
@@ -267,7 +271,7 @@ cell_frac_plot_data <- sc_data_files |>
   unnest(cols = qq_data)
 
 cell_frac_p <- cell_frac_plot_data |>
-  mutate(cell_type = factor(cell_type, levels = c("CD4 NC", "B IN", "Plasma"))) |>
+  mutate(cell_type = factor(cell_type, levels = c("CD4_NC", "B_IN", "Plasma"))) |>
   ggplot(aes(log_x_bin_mid, log_y_pvalue,
              ymin = log_lower_ci, ymax = log_upper_ci)) +
   geom_point(alpha = 0.8) +
@@ -287,7 +291,7 @@ ggsave(
 )
 
 indiv_frac_plot_data <- sc_data_files |>
-  filter(cell_type == "CD4 NC") |>
+  filter(cell_type == "CD4_NC") |>
   filter(cell_frac == 1) |>
   mutate(indiv_frac = factor(indiv_frac)) |>
   summarise(file_list = list(variant_file), .by = indiv_frac) |>

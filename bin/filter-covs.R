@@ -27,8 +27,20 @@ if (cov_spec == "bulk_pca") {
   covs <- covs |>
     select(sample_id, cell_id, sex, age,
            starts_with("geno_pc"), starts_with("PC_"), "G2M_score", "S_score")
+} else if (cov_spec == "bulk_pca+pseudotime") {
+  covs <- covs |>
+    select(sample_id, cell_id, sex, age,
+           starts_with("geno_pc"), starts_with("PC_"), "pseudotime")
+} else if (cov_spec == "bulk_pca+starcat_CD4_Naive") {
+  covs <- covs |>
+    select(sample_id, cell_id, sex, age,
+           starts_with("geno_pc"), starts_with("PC_"), "starcat_CD4_Naive")
+} else if (cov_spec == "bulk_pca+starcat_Cytotoxic") {
+  covs <- covs |>
+    select(sample_id, cell_id, sex, age,
+           starts_with("geno_pc"), starts_with("PC_"), "starcat_Cytotoxic")
 } else {
-  step("Unknown cov_spec.")
+  stop("Unknown cov_spec.")
 }
 
 write_tsv(covs, file = paste0(cell_type, "-", cov_spec, "-covs.tsv"))
