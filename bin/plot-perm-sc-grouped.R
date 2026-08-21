@@ -5,49 +5,36 @@ suppressPackageStartupMessages({
   library(readr)
   library(data.table)
   library(ggplot2)
-  library(forcats)
-  library(patchwork)
-  library(qvalue)
   library(purrr)
   library(stringr)
   library(tidyr)
-  library(ggh4x)
 })
+
+source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
 
 args <- commandArgs(trailingOnly = TRUE)
 
 sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
   filter(k != "none")
 
-compute_qq_data <- function(variant_files, prop_file, pvalue_col) {
-
-  variant_data <- bind_rows(!!!map(
-    variant_files,
-    function(x) {
-      read_tsv(x, show_col_types = FALSE) |>
-        select(feature_id, maf, all_of(pvalue_col))
-    })
-  )
-
-  prop_data <- read_tsv(prop_file, show_col_types = FALSE)
-
-  pvalue_data <- left_join(
-    variant_data,
-    prop_data,
-    by = "feature_id"
-  ) |>
-    filter(maf > 0.1) |>
-    filter(pb_non_zero_frac > 0.1)
-
-  pvalue <- pvalue_data[[pvalue_col]]
+compute_qq_data <- function(pvalue) {
   pvalue <- pvalue[!is.na(pvalue)]
   n <- length(pvalue)
+  if (n == 0L) {
+    return(tibble(
+      log_x_bin_mid = double(),
+      log_y_pvalue = double(),
+      log_lower_ci = double(),
+      log_upper_ci = double()
+    ))
+  }
+
   m <- (1:n) / (n + 1)
-  c <- abs(qnorm(0.05 / 2))
+  z <- abs(qnorm(0.05 / 2))
   v <- (1:n) * (n - (1:n) + 1) / (n + 1)^2 / (n + 2)
   s <- sqrt(v)
-  lower_ci <- m - c * s
-  upper_ci <- m + c * s
+  lower_ci <- m - z * s
+  upper_ci <- m + z * s
 
   log_x_pvalue <- -log10(m)
   y_pvalue <- sort(pvalue)
@@ -67,104 +54,164 @@ compute_qq_data <- function(variant_files, prop_file, pvalue_col) {
     mutate(log_x_bin_mid = seq(0.05, 5.95, by = 0.1)[as.numeric(x_bin)])
 }
 
-compute_qq_data_het <- function(variant_files, prop_file) {
-  compute_qq_data(variant_files, prop_file, "group_linear_pvalue")
+stat_id_for_col <- function(col) {
+  if (col == "pvalue") {
+    return("pvalue")
+  }
+  if (col == "group_linear_pvalue") {
+    return("linear")
+  }
+  if (col == "group_acat_pvalue") {
+    return("acat")
+  }
+  q <- str_match(col, "_q([0-9]+)_pvalue$")[, 2]
+  if (!is.na(q)) {
+    return(paste0("q", q))
+  }
+  col
 }
 
-compute_qq_data_group1 <- function(variant_files, prop_file, int_cov) {
-  col <- paste0(int_cov, "_q1_pvalue")
-  compute_qq_data(variant_files, prop_file, col)
+stat_label <- function(stat) {
+  if (stat == "pvalue") {
+    return("main-effect p-value")
+  }
+  if (stat == "linear") {
+    return("group_linear p-value")
+  }
+  if (stat == "acat") {
+    return("group_acat p-value")
+  }
+  if (startsWith(stat, "q")) {
+    return(paste0(stat, " p-value"))
+  }
+  stat
 }
 
-compute_qq_data_pvalue <- function(variant_files, prop_file) {
-  compute_qq_data(variant_files, prop_file, "pvalue")
+stat_order <- function(stat) {
+  qn <- suppressWarnings(as.integer(sub("^q", "", stat)))
+  dplyr::case_when(
+    stat == "pvalue" ~ 1L,
+    stat == "linear" ~ 2L,
+    stat == "acat" ~ 3L,
+    !is.na(qn) ~ 10L + qn,
+    TRUE ~ 99L
+  )
 }
 
-build_qq_plot_data <- function(data_files, qq_fn) {
-  data_files |>
-    filter(cell_frac == 1) |>
-    filter(indiv_frac == 1) |>
-    summarise(
-      file_list = list(variant_file),
-      prop_file = first(prop_file),
-      int_cov = first(int_cov),
-      .by = c(cell_type, int_cov, k)
-    ) |>
-    rowwise() |>
-    mutate(qq_data = list(qq_fn(file_list, prop_file, int_cov))) |>
-    ungroup() |>
-    select(-file_list) |>
-    unnest(cols = qq_data)
+collect_group_qq <- function(variant_files, prop_file, int_cov) {
+  header <- names(fread(variant_files[[1]], nrows = 0, showProgress = FALSE))
+  q_cols <- grep(
+    paste0("^", int_cov, "_q[0-9]+_pvalue$"),
+    header,
+    value = TRUE
+  )
+  pvalue_cols <- intersect(
+    c("pvalue", "group_linear_pvalue", "group_acat_pvalue", q_cols),
+    header
+  )
+  if (length(pvalue_cols) == 0L) {
+    return(tibble())
+  }
+
+  prop_data <- fread(
+    prop_file,
+    select = c("feature_id", "pb_non_zero_frac"),
+    showProgress = FALSE
+  )
+  keep_genes <- prop_data[pb_non_zero_frac > 0.1, feature_id]
+
+  variant_data <- rbindlist(lapply(variant_files, function(x) {
+    dt <- fread(
+      x,
+      select = c("feature_id", "maf", pvalue_cols),
+      showProgress = FALSE
+    )
+    dt[maf > 0.1 & feature_id %chin% keep_genes]
+  }))
+
+  bind_rows(lapply(pvalue_cols, function(col) {
+    compute_qq_data(variant_data[[col]]) |>
+      mutate(stat = stat_id_for_col(col))
+  }))
 }
 
-het_plot_data <- build_qq_plot_data(sc_data_files, function(files, prop, cov) compute_qq_data_het(files, prop)) |>
-  mutate(k_label = paste0("K=", k))
-
-group1_plot_data <- build_qq_plot_data(sc_data_files, compute_qq_data_group1) |>
-  mutate(k_label = paste0("K=", k))
-
-pvalue_plot_data <- build_qq_plot_data(sc_data_files, function(files, prop, cov) compute_qq_data_pvalue(files, prop)) |>
-  mutate(k_label = paste0("K=", k))
-
-het_p <- het_plot_data |>
-  ggplot(aes(log_x_bin_mid, log_y_pvalue,
-             ymin = log_lower_ci, ymax = log_upper_ci,
-             colour = k_label)) +
-  geom_point(alpha = 0.8) +
-  geom_abline(linetype = "dashed") +
-  geom_ribbon(linetype = 2, alpha = 0.1) +
-  facet_grid(vars(cell_type, int_cov), vars(k_label)) +
-  labs(
-    x = "Expected -log10(het_pvalue)",
-    y = "Observed -log10(het_pvalue)",
-    colour = "Grouping"
+plot_data <- sc_data_files |>
+  filter(cell_frac == 1, indiv_frac == 1) |>
+  summarise(
+    file_list = list(variant_file),
+    prop_file = first(prop_file),
+    .by = c(cell_type, int_cov, k)
+  ) |>
+  rowwise() |>
+  mutate(qq_data = list(collect_group_qq(file_list, prop_file, int_cov))) |>
+  ungroup() |>
+  select(-file_list) |>
+  unnest(cols = qq_data) |>
+  mutate(
+    plot_id = if_else(str_starts(stat, "q"), "quantile", stat),
+    quantile = if_else(str_starts(stat, "q"), stat, NA_character_),
+    panel_label = paste0(cell_type, " (", int_cov, ")")
   )
 
-group1_p <- group1_plot_data |>
-  ggplot(aes(log_x_bin_mid, log_y_pvalue,
-             ymin = log_lower_ci, ymax = log_upper_ci,
-             colour = k_label)) +
-  geom_point(alpha = 0.8) +
-  geom_abline(linetype = "dashed") +
-  geom_ribbon(linetype = 2, alpha = 0.1) +
-  facet_grid(vars(cell_type, int_cov), vars(k_label)) +
-  labs(
-    x = "Expected -log10(q1_pvalue)",
-    y = "Observed -log10(q1_pvalue)",
-    colour = "Grouping"
+make_qq_plot <- function(data, colour_var, xlab, ylab, colour_lab) {
+  data |>
+    ggplot(aes(
+      log_x_bin_mid, log_y_pvalue,
+      ymin = log_lower_ci, ymax = log_upper_ci,
+      colour = .data[[colour_var]]
+    )) +
+    geom_point(alpha = 0.8) +
+    geom_abline(linetype = "dashed") +
+    geom_ribbon(linetype = 2, alpha = 0.1) +
+    facet_wrap(vars(panel_label)) +
+    labs(
+      x = xlab,
+      y = ylab,
+      colour = colour_lab
+    ) +
+    theme_jp()
+}
+
+single_stats <- c("pvalue", "linear", "acat")
+single_stats <- single_stats[single_stats %in% plot_data$plot_id]
+
+for (s in single_stats) {
+  p <- make_qq_plot(
+    plot_data |> filter(plot_id == s),
+    "cell_type",
+    paste0("Expected -log10(", stat_label(s), ")"),
+    paste0("Observed -log10(", stat_label(s), ")"),
+    "Cell type"
+  )
+  ggsave(
+    paste0("perm-sc-grouped-", s, "-plot.pdf"),
+    p,
+    width = 14,
+    height = 10
+  )
+}
+
+quantile_data <- plot_data |>
+  filter(plot_id == "quantile") |>
+  mutate(
+    quantile = factor(
+      quantile,
+      levels = unique(quantile)[order(stat_order(unique(quantile)))]
+    )
   )
 
-pvalue_p <- pvalue_plot_data |>
-  ggplot(aes(log_x_bin_mid, log_y_pvalue,
-             ymin = log_lower_ci, ymax = log_upper_ci,
-             colour = k_label)) +
-  geom_point(alpha = 0.8) +
-  geom_abline(linetype = "dashed") +
-  geom_ribbon(linetype = 2, alpha = 0.1) +
-  facet_grid(vars(cell_type, int_cov), vars(k_label)) +
-  labs(
-    x = "Expected -log10(pvalue)",
-    y = "Observed -log10(pvalue)",
-    colour = "Grouping"
+if (nrow(quantile_data) > 0L) {
+  quantile_p <- make_qq_plot(
+    quantile_data,
+    "quantile",
+    "Expected -log10(quantile p-value)",
+    "Observed -log10(quantile p-value)",
+    "Quantile"
   )
-
-ggsave(
-  "perm-sc-grouped-het-plot.pdf",
-  het_p,
-  width = 12,
-  height = 10
-)
-
-ggsave(
-  "perm-sc-grouped-q1-plot.pdf",
-  group1_p,
-  width = 12,
-  height = 10
-)
-
-ggsave(
-  "perm-sc-grouped-pvalue-plot.pdf",
-  pvalue_p,
-  width = 12,
-  height = 10
-)
+  ggsave(
+    "perm-sc-grouped-quantile-plot.pdf",
+    quantile_p,
+    width = 14,
+    height = 10
+  )
+}

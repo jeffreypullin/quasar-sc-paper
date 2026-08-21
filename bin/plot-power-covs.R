@@ -65,8 +65,7 @@ filter_int_cov_data <- function(df) {
     filter(cell_frac == 1) |>
     filter(
       (cell_type == "B_all" & cov_spec %in% c("bulk_pca", "bulk_pca+pseudotime")) |
-        (cell_type == "CD4_T_all" & cov_spec %in% c("bulk_pca", "bulk_pca+starcat_CD4_Naive")) |
-        (cell_type == "CD8_T_all" & cov_spec %in% c("bulk_pca", "bulk_pca+starcat_Cytotoxic"))
+        (cell_type == "T_all" & cov_spec %in% c("bulk_pca", "bulk_pca+starcat_CD4_Naive", "bulk_pca+starcat_Cytotoxic"))
     )
 }
 
@@ -79,7 +78,7 @@ int_cov_plot_data <- bind_rows(
   mutate(
     cov_type = if_else(cov_spec == "bulk_pca", "Bulk PCA", "Bulk PCA + additional covariate"),
     cov_type = factor(cov_type, levels = c("Bulk PCA", "Bulk PCA + additional covariate")),
-    cell_type = factor(cell_type, levels = c("B_all", "CD4_T_all", "CD8_T_all"))
+    cell_type = factor(cell_type, levels = c("B_all", "T_all"))
   )
 
 int_cov_p <- int_cov_plot_data |>

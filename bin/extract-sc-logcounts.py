@@ -12,35 +12,23 @@ from cell_label_subset import cell_label_mask  # noqa: E402
 from subsample_cells import subsample_cells_within_individuals  # noqa: E402
 from subsample_individuals import subsample_individuals  # noqa: E402
 
-GENES = [
-    "ENSG00000197728",
-    "ENSG00000196735",
-    "ENSG00000143297",
-    "ENSG00000179344",
-    "ENSG00000215845",
-    "ENSG00000171476",
-    "ENSG00000196975",
-    "ENSG00000153283",
-    "ENSG00000138639",
-    "ENSG00000132185",
-    "ENSG00000127990",
-    "ENSG00000184009",
-    "ENSG00000114013",
-    "ENSG00000224137",
-    "ENSG00000033867",
-    "ENSG00000185344",
-    "ENSG00000183172",
-    "ENSG00000204001",
-    "ENSG00000196562",
-    "ENSG00000132507",
-    "ENSG00000161016",
-]
-
 cell_type = sys.argv[1]
 cell_frac = float(sys.argv[2])
 indiv_frac = float(sys.argv[3])
 adata_path = sys.argv[4]
-out_path = sys.argv[5] if len(sys.argv) > 5 else f"{cell_type}-sc-logcounts.tsv"
+genes_tsv = Path(sys.argv[5])
+out_path = sys.argv[6] if len(sys.argv) > 6 else f"{cell_type}-sc-logcounts.tsv"
+
+genes_df = pd.read_csv(genes_tsv, sep="\t")
+if "feature_id" not in genes_df.columns:
+    sys.exit(f"genes TSV must contain feature_id column; got: {', '.join(genes_df.columns)}")
+
+if "cell_type" in genes_df.columns:
+    genes_df = genes_df.loc[genes_df["cell_type"].astype(str) == cell_type]
+
+GENES = list(dict.fromkeys(genes_df["feature_id"].dropna().astype(str).tolist()))
+if not GENES:
+    sys.exit(f"no feature_id values found in genes TSV for cell type {cell_type}")
 
 adata = sc.read_h5ad(adata_path)
 sc.pp.normalize_total(adata)

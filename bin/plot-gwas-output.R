@@ -121,4 +121,4 @@ pb_filtered |>
 
 sc_filtered |>
   arrange(pvalue) |>
-  print(n = 20)
+  print(n = 100)

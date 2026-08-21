@@ -81,7 +81,7 @@ manhattan_plot <- manhattan_data |>
   labs(
     x = "Chromosome",
     y = expression(-log[10](p)),
-    title = "CD4_T_all cell-state abundance QTL (csaQTL) by SEACell"
+    title = "T_all cell-state abundance QTL (csaQTL) by SEACell"
   ) +
   theme_bw() +
   theme(

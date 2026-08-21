@@ -87,13 +87,13 @@ process EXTRACT_GENOTYPES {
     conda "$projectDir/envs/extract-genotypes.yaml"
     label "micro"
 
-    input: tuple val(dataset), val(plink_bed)
+    input: tuple val(dataset), val(plink_bed), path(variants_tsv)
     output: tuple val(dataset), path("${dataset}-genotype-dosages.tsv")
 
     script:
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
     """
-    extract-genotypes.py "$prefix"
+    extract-genotypes.py "$prefix" "$variants_tsv"
     mv genotype-dosages.tsv "${dataset}-genotype-dosages.tsv"
     """
 }
@@ -103,12 +103,61 @@ process COMPUTE_SC_COUNTS{
     label "mega_mem"
 
     input: tuple val(info), val(raw_sc_data), val(gene_properties)
-    output: tuple val(info), path("${info.dataset}-${info.cell_type}-sc-pheno.tsv")
+    output: tuple val("counts"), val(info), path("${info.dataset}-${info.cell_type}-sc-pheno.tsv")
 
     script:
     """
-    compute-sc-counts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties"
+    compute-sc-counts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.n_cells_target}" "${info.count_frac}"
     mv "${info.cell_type}-sc-pheno.tsv" "${info.dataset}-${info.cell_type}-sc-pheno.tsv"
+    """
+}
+
+process COMPUTE_SC_SCT_COUNTS {
+    conda "$projectDir/envs/sctransform.yaml"
+    label "long_mega_mem"
+
+    input: tuple val(info), path(sc_counts), val(raw_sc_data)
+    output: tuple val("sct_counts"), val(info), path("${info.dataset}-${info.cell_type}-sct-sc-pheno.tsv")
+
+    script:
+    """
+    compute-sc-sct-counts.R "$sc_counts" "$raw_sc_data" "${info.cell_type}"
+    mv "${info.cell_type}-sct-sc-pheno.tsv" "${info.dataset}-${info.cell_type}-sct-sc-pheno.tsv"
+    """
+}
+
+process COMPUTE_SC_OFFSETS {
+    conda "$projectDir/envs/scanpy.yaml"
+    label "high_mem"
+    publishDir "output", pattern: "*-offset-summary.tsv"
+
+    input: tuple val(info), val(sc_pheno)
+    output: tuple val(info),
+        path("${info.dataset}-${info.cell_type}-offset-percell.tsv"),
+        path("${info.dataset}-${info.cell_type}-offset-donorflat.tsv"),
+        path("${info.dataset}-${info.cell_type}-offset-constant.tsv"),
+        path("${info.dataset}-${info.cell_type}-offset-summary.tsv")
+
+    script:
+    """
+    compute-sc-offsets.py "${info.cell_type}" "$sc_pheno"
+    for spec in percell donorflat constant summary; do
+        mv "${info.cell_type}-offset-\$spec.tsv" "${info.dataset}-${info.cell_type}-offset-\$spec.tsv"
+    done
+    """
+}
+
+process COMPUTE_SC_LOGCOUNTS {
+    conda "$projectDir/envs/scanpy.yaml"
+    label "mega_mem"
+
+    input: tuple val(info), val(raw_sc_data), val(gene_properties)
+    output: tuple val("log_counts"), val(info), path("${info.dataset}-${info.cell_type}-sc-logcounts.tsv")
+
+    script:
+    """
+    compute-sc-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.n_cells_target}" "${info.count_frac}"
+    mv "${info.cell_type}-sc-logcounts.tsv" "${info.dataset}-${info.cell_type}-sc-logcounts.tsv"
     """
 }
 
@@ -116,12 +165,12 @@ process EXTRACT_SC_LOGCOUNTS {
     conda "$projectDir/envs/scanpy.yaml"
     label "mega_mem"
 
-    input: tuple val(info), val(raw_sc_data), val(gene_properties)
+    input: tuple val(info), val(raw_sc_data), val(gene_properties), path(genes_tsv)
     output: tuple val(info), path("${info.dataset}-${info.cell_type}-sc-logcounts.tsv")
 
     script:
     """
-    extract-sc-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data"
+    extract-sc-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$genes_tsv"
     mv "${info.cell_type}-sc-logcounts.tsv" "${info.dataset}-${info.cell_type}-sc-logcounts.tsv"
     """
 }
@@ -154,6 +203,20 @@ process COMPUTE_SC_PC_PHENO {
     """
 }
 
+process COMPUTE_SC_PC_SC_PHENO {
+    conda "$projectDir/envs/scanpy.yaml"
+    label "high_mem"
+
+    input: tuple val(info), val(raw_sc_data)
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-sc-pc-sc-pheno.tsv")
+
+    script:
+    """
+    compute-sc-pc-sc-pheno.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data"
+    mv "${info.cell_type}-sc-pc-sc-pheno.tsv" "${info.dataset}-${info.cell_type}-sc-pc-sc-pheno.tsv"
+    """
+}
+
 process COMPUTE_PB_COUNTS{
     conda "$projectDir/envs/scanpy.yaml"
     label "high_mem"
@@ -163,7 +226,7 @@ process COMPUTE_PB_COUNTS{
 
     script:
     """
-    compute-pb-counts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties"
+    compute-pb-counts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.n_cells_target}" "${info.count_frac}"
     mv "${info.cell_type}-pb-pheno.tsv" "${info.dataset}-${info.cell_type}-pb-pheno.tsv"
     """
 }
@@ -177,7 +240,7 @@ process COMPUTE_PB_LOGCOUNTS{
 
     script:
     """
-    compute-pb-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties"
+    compute-pb-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.n_cells_target}" "${info.count_frac}"
     mv "${info.cell_type}-pb-pheno.tsv" "${info.dataset}-${info.cell_type}-pb-pheno.tsv"
     """
 }
@@ -188,12 +251,13 @@ process COMPUTE_CLUSTER_SIZES{
     publishDir "output"
     
     input: tuple val(dataset), val(raw_sc_data)
-    output: tuple val(dataset), path("${dataset}-cluster-sizes.tsv")
+    output: tuple val(dataset), path("${dataset}-cluster-sizes.tsv"), path("${dataset}-cells-per-indiv.tsv")
 
     script:
     """
     compute-cluster-sizes.py "$raw_sc_data"
     mv cluster-sizes.tsv "${dataset}-cluster-sizes.tsv"
+    mv cells-per-indiv.tsv "${dataset}-cells-per-indiv.tsv"
     """
 }
 
@@ -328,12 +392,12 @@ process PREPARE_SLINGSHOT_ADATA {
     label "high_mem"
 
     input: tuple val(info), val(raw_sc_data)
-    output: tuple val(info), path("${info.dataset}-${info.cell_type}-slingshot-input.h5ad")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-slingshot-input.tsv")
 
     script:
     """
     prepare-slingshot-adata.py "${info.cell_type}" "$raw_sc_data"
-    mv "${info.cell_type}-slingshot-input.h5ad" "${info.dataset}-${info.cell_type}-slingshot-input.h5ad"
+    mv "${info.cell_type}-slingshot-input.tsv" "${info.dataset}-${info.cell_type}-slingshot-input.tsv"
     """
 }
 
@@ -356,7 +420,7 @@ process RUN_SLINGSHOT {
     label "high_mem"
     publishDir path: "output", pattern: "*.pdf", mode: "copy"
 
-    input: tuple val(info), path(h5ad)
+    input: tuple val(info), path(slingshot_input)
     output:
         tuple val(info), path("${info.dataset}-${info.cell_type}-pseudotime.tsv"),
         path("${info.dataset}-${info.cell_type}-slingshot.pdf"),
@@ -364,7 +428,7 @@ process RUN_SLINGSHOT {
 
     script:
     """
-    run-slingshot.R "$h5ad" "${info.cell_type}"
+    run-slingshot.R "$slingshot_input" "${info.cell_type}"
     mv "${info.cell_type}-pseudotime.tsv" "${info.dataset}-${info.cell_type}-pseudotime.tsv"
     mv "${info.cell_type}-slingshot.pdf" "${info.dataset}-${info.cell_type}-slingshot.pdf"
     mv "${info.cell_type}-slingshot-celltype.pdf" "${info.dataset}-${info.cell_type}-slingshot-celltype.pdf"

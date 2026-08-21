@@ -12,13 +12,13 @@ args <- commandArgs(trailingOnly = TRUE)
 
 sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
   filter(k == "seacells") |>
-  filter(cell_type == "CD4_T_all")
+  filter(cell_type == "T_all")
 
 seacells_files <- read_tsv(args[2], show_col_types = FALSE)
 
-# Per-metacell UMAP coordinates and sizes for CD4_T_all.
+# Per-metacell UMAP coordinates and sizes for T_all.
 metacell_info <- seacells_files |>
-  filter(cell_type == "CD4_T_all") |>
+  filter(cell_type == "T_all") |>
   slice_head(n = 1) |>
   pull(info_file) |>
   read_tsv(show_col_types = FALSE) |>
@@ -77,7 +77,7 @@ p <- plot_data |>
     y = "UMAP 2",
     size = "Cells per\nmetacell",
     colour = "Effect z-score\n(beta / se)",
-    title = paste0("CD4_T_all metacell effects for ", plot_feature_id, " (", lead_variants$snp_id, ")")
+    title = paste0("T_all metacell effects for ", plot_feature_id, " (", lead_variants$snp_id, ")")
   ) +
   theme_bw() +
   theme(

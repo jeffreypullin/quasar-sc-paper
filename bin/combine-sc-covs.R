@@ -13,7 +13,7 @@ sc_expr_covs <- read_tsv(args[3], show_col_types = FALSE)
 geno_pcs  <- read_tsv(args[4], show_col_types = FALSE)
 
 pb_covs <- left_join(pb_expr_covs, geno_pcs, by = "sample_id") |>
-  select(sample_id, sex, age, paste0("PC_", 1:5), paste0("geno_pc", 1:6))
+  select(sample_id, sex, age, paste0("PC_", 1:2), paste0("geno_pc", 1:6))
 
 int_cov_cols <- c(
   "pseudotime",
@@ -22,7 +22,7 @@ int_cov_cols <- c(
 )
 
 covs <- sc_expr_covs |>
-  select(sample_id, cell_id, paste0("scPC_", 1:5), pct_counts_mt, S_score, G2M_score,
+  select(sample_id, cell_id, paste0("scPC_", 1:2), pct_counts_mt, S_score, G2M_score,
          any_of(int_cov_cols)) |>
   left_join(pb_covs, by = join_by(sample_id)) |>
   select(sample_id, cell_id, everything())

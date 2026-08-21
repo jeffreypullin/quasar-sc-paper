@@ -25,14 +25,18 @@ chr_genes <- anno |>
   filter(`#chr` == as.numeric(str_sub(chr, 4, 5))) |>
   pull(phenotype_id)
 
+gene_cols <- setdiff(colnames(sc_counts), c("sample_id", "cell_id"))
+totals <- rowSums(sc_counts[, gene_cols, drop = FALSE])
+
+# Library-size offset from all genes, before restricting to this chromosome.
 sc_counts <- sc_counts |>
-  select(sample_id, any_of(chr_genes))
+  mutate(log_cell_read_counts = ifelse(totals > 0, log(totals), 0)) |>
+  select(sample_id, log_cell_read_counts, any_of(chr_genes))
 
 covs <- left_join(expr_covs, geno_pcs, by = "sample_id") |>
   select(sample_id, sex, age, paste0("PC_", 1:5), paste0("geno_pc", 1:6))
 
-all_data <- left_join(covs, sc_counts, by = "sample_id") |>
-  mutate(size_factor = log(rowSums(pick(-(1:14)))))
+all_data <- left_join(covs, sc_counts, by = "sample_id")
 
 write_tsv(
   all_data,

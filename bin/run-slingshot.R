@@ -1,7 +1,6 @@
 #!/usr/bin/env Rscript
 
 suppressPackageStartupMessages({
-  library(anndataR)
   library(SingleCellExperiment)
   library(slingshot)
   library(ggplot2)
@@ -9,15 +8,28 @@ suppressPackageStartupMessages({
 })
 
 args <- commandArgs(trailingOnly = TRUE)
-h5ad_file <- args[1]
+input_tsv <- args[1]
 output_prefix <- args[2]
 n_pc_use <- 10L
 
-sce <- read_h5ad(h5ad_file, as = "SingleCellExperiment")
+dat <- read_tsv(input_tsv, show_col_types = FALSE)
+cell_ids <- dat$cell_id
+pc_cols <- grep("^PC[0-9]+$", colnames(dat), value = TRUE)
+rd_mat <- as.matrix(dat[, pc_cols, drop = FALSE])
+rownames(rd_mat) <- cell_ids
 
-if (inherits(reducedDim(sce, "X_pca"), "LinearEmbeddingMatrix")) {
-  reducedDim(sce, "X_pca") <- as.matrix(reducedDim(sce, "X_pca"))
-}
+cd <- data.frame(
+  cell_label = dat$cell_label,
+  row.names = cell_ids,
+  stringsAsFactors = FALSE
+)
+
+sce <- SingleCellExperiment(
+  assays = list(X = matrix(0, nrow = 1L, ncol = length(cell_ids))),
+  colData = cd,
+  reducedDims = list(X_pca = rd_mat)
+)
+colnames(sce) <- cell_ids
 
 n_cells <- ncol(sce)
 k <- max(1L, floor(0.2 * n_cells))
@@ -46,7 +58,6 @@ curves <- getCurves(
 
 ## Same PC basis as the fit (required for predict)
 rd_full <- as.matrix(reducedDim(sce, "X_pca"))[, seq_len(ncp), drop = FALSE]
-cell_ids <- colnames(sce)
 rownames(rd_full) <- cell_ids
 
 curves_all <- tryCatch(

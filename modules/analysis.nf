@@ -16,6 +16,52 @@ process PLOT_POWER {
     """
 }
 
+process PLOT_POWER_N_CELLS_FILTER {
+    publishDir "output"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        path "power-n-cells-filter-plot.pdf"
+
+    script:
+    """
+    plot-power-n-cells-filter.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_POWER_OFFSET {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val sc_offset_quasar_file
+    output:
+        tuple path("power-offset-plot.pdf"),
+              path("power-offset-scatter-plot.pdf"),
+              path("power-offset-summary.tsv")
+
+    script:
+    """
+    plot-power-offset.R $sc_offset_quasar_file
+    """
+}
+
+process PLOT_CELLS_PER_INDIV {
+    publishDir "output"
+
+    input:
+        path cells_per_indiv_file
+    output:
+        path "cells-per-indiv-plot.pdf"
+
+    script:
+    """
+    plot-cells-per-indiv.R $cells_per_indiv_file
+    """
+}
+
 process PLOT_POWER_COVS {
     publishDir "output"
 
@@ -96,15 +142,49 @@ process PLOT_PERM {
     publishDir "output"
 
     input: val perm_sc_quasar_file
-    output: tuple path("perm-overall-plot.pdf"), 
-        path("perm-prop-plot.pdf"), 
-        path("perm-maf-plot.pdf"),
-        path("perm-cell-frac-plot.pdf"),
-        path("perm-indiv-frac-plot.pdf")
+    output: path("perm-overall-plot.pdf")
 
     script:
     """
     plot-perm.R $perm_sc_quasar_file
+    """
+}
+
+process PLOT_PERM_CELL_FRAC {
+    label "high_mem"
+    publishDir "output"
+
+    input:
+        val perm_sc_quasar_file
+        val perm_pb_quasar_file
+    output:
+        tuple path("perm-cell-frac-lm-plot.pdf"),
+              path("perm-cell-frac-nb_glm-plot.pdf"),
+              path("perm-cell-frac-p_glmm_sc-plot.pdf"),
+              path("perm-cell-frac-lmm_sc-plot.pdf")
+
+    script:
+    """
+    plot-perm-cell-frac.R $perm_sc_quasar_file $perm_pb_quasar_file
+    """
+}
+
+process PLOT_PERM_COUNT_FRAC {
+    label "high_mem"
+    publishDir "output"
+
+    input:
+        val perm_sc_quasar_file
+        val perm_pb_quasar_file
+    output:
+        tuple path("perm-count-frac-lm-plot.pdf"),
+              path("perm-count-frac-nb_glm-plot.pdf"),
+              path("perm-count-frac-p_glmm_sc-plot.pdf"),
+              path("perm-count-frac-lmm_sc-plot.pdf")
+
+    script:
+    """
+    plot-perm-count-frac.R $perm_sc_quasar_file $perm_pb_quasar_file
     """
 }
 
@@ -179,7 +259,7 @@ process PLOT_INT_OUTPUT {
 
 process PLOT_PERM_SC_INT_GLOBAL {
     publishDir "output"
-    //label "high_mem"
+    label "high_mem"
 
     input: val perm_sc_quasar_file
     output: tuple path("perm-sc-int-global-plot.pdf"), path("perm-sc-int-global-main-plot.pdf")
@@ -192,7 +272,7 @@ process PLOT_PERM_SC_INT_GLOBAL {
 
 process PLOT_PERM_SC_INT {
     publishDir "output"
-    //label "high_mem"
+    label "high_mem"
 
     input: val perm_sc_quasar_file
     output: tuple path("perm-sc-int-plot.pdf"), path("perm-sc-int-main-plot.pdf")
@@ -205,7 +285,7 @@ process PLOT_PERM_SC_INT {
 
 process PLOT_PERM_SC_INT_WITHIN {
     publishDir "output"
-    //label "high_mem"
+    label "high_mem"
 
     input: val perm_sc_quasar_file
     output: tuple path("perm-sc-int-within-plot.pdf"), path("perm-sc-int-within-main-plot.pdf")
@@ -218,11 +298,10 @@ process PLOT_PERM_SC_INT_WITHIN {
 
 process PLOT_PERM_SC_GROUPED {
     publishDir "output"
+    label "high_mem"
 
     input: val perm_sc_quasar_file
-    output: tuple path("perm-sc-grouped-het-plot.pdf"),
-        path("perm-sc-grouped-q1-plot.pdf"),
-        path("perm-sc-grouped-pvalue-plot.pdf")
+    output: path("perm-sc-grouped-*-plot.pdf")
 
     script:
     """
@@ -235,11 +314,44 @@ process PLOT_GROUPED_SC_OUTPUT {
     publishDir "output"
 
     input: val sc_quasar_file
-    output: tuple path("grouped-sc-output-top9-plot.pdf"), path("grouped-sc-output-gws-leads.tsv")
+    output: tuple path("grouped-sc-output-*-linear-egenes-plot.pdf"),
+                 path("grouped-sc-output-*-acat-egenes-plot.pdf"),
+                 path("grouped-sc-output-het-vs-linear-plot.pdf"),
+                 path("grouped-sc-output-gws-leads.tsv")
 
     script:
     """
     plot-grouped-sc-output.R $sc_quasar_file
+    """
+}
+
+process PLOT_GROUPED_VS_INT {
+    label "high_mem"
+    publishDir "output"
+
+    input:
+        val sc_quasar_file
+        val castie_file
+    output: tuple path("grouped-vs-int-scatter-plot.pdf"),
+                 path("grouped-vs-int-upset-plot.pdf"),
+                 path("grouped-vs-int-upset-genes.tsv")
+
+    script:
+    """
+    plot-grouped-vs-int.R $sc_quasar_file $castie_file
+    """
+}
+
+process PLOT_SC_PGLMM_VS_LMM {
+    label "high_mem"
+    publishDir "output"
+
+    input: val sc_quasar_file
+    output: path("sc-pglmm-vs-lmm-plot.pdf")
+
+    script:
+    """
+    plot-sc-pglmm-vs-lmm.R $sc_quasar_file
     """
 }
 
@@ -274,12 +386,28 @@ process PLOT_SC_INT_OUTPUT {
     label "high_mem"
     publishDir "output"
 
-    input: val sc_quasar_file
+    input:
+        val sc_quasar_file
+        val castie_file
     output: path("sc-int-eqtl-hits.tsv")
 
     script:
     """
-    plot-sc-int-output.R $sc_quasar_file 
+    plot-sc-int-output.R $sc_quasar_file $castie_file
+    """
+}
+
+process PLOT_QUASAR_SC_INT_OUTPUT {
+    label "high_mem"
+    publishDir "output"
+
+    input: val sc_quasar_file
+    output: path("quasar-sc-int-eqtl-hits.tsv")
+
+    script:
+    """
+    plot-sc-int-output.R $sc_quasar_file
+    mv sc-int-eqtl-hits.tsv quasar-sc-int-eqtl-hits.tsv
     """
 }
 
@@ -313,15 +441,35 @@ process PLOT_PC_GWAS_OUTPUT {
     label "high_mem"
     publishDir "output"
 
-    input: val pc_gwas_file
+    input:
+        val pc_gwas_file
+        val pc_sc_gwas_file
     output:
         tuple path("pc-gwas-B_IN-plot.pdf"),
         path("pc-gwas-CD4_NC-plot.pdf"),
+        path("pc-gwas-lmm_sc-B_IN-plot.pdf"),
+        path("pc-gwas-lmm_sc-CD4_NC-plot.pdf"),
         path("pc-gwas-gws-leads.tsv")
 
     script:
     """
-    plot-pc-gwas-output.R $pc_gwas_file
+    plot-pc-gwas-output.R $pc_gwas_file $pc_sc_gwas_file
+    """
+}
+
+process PLOT_PC_GWAS_COMPARISON {
+    publishDir "output"
+
+    input:
+        val pc_gwas_file
+        val pc_sc_gwas_file
+    output:
+        tuple path("time-pc-gwas-plot.pdf"),
+              path("power-pc-gwas-plot.pdf")
+
+    script:
+    """
+    plot-pc-gwas-comparison.R $pc_gwas_file $pc_sc_gwas_file
     """
 }
 
@@ -341,6 +489,41 @@ process PLOT_PVALUE_SCATTER {
     """
 }
 
+process PLOT_ZSCORE_SCATTER {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+      val pb_quasar_file
+      val sc_quasar_file
+      val saigeqtl_file
+
+    output:
+      path("zscore-scatter-B_IN.pdf")
+      path("zscore-scatter-saigeqtl-B_IN.pdf")
+
+    script:
+    """
+    plot-zscore-scatter.R $pb_quasar_file $sc_quasar_file $saigeqtl_file
+    """
+}
+
+process PLOT_METHOD_SCATTER {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        path("method-scatter-plot.pdf")
+
+    script:
+    """
+    plot-method-scatter.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
 process PLOT_MAIN_VS_INT {
     publishDir "output"
     label "high_mem"
@@ -352,6 +535,21 @@ process PLOT_MAIN_VS_INT {
     script:
     """
     plot-main-vs-int.R $sc_quasar_file
+    """
+}
+
+process PLOT_INT_TIME {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val sc_quasar_file
+        val castie_file
+    output: path("time-int-plot.pdf")
+
+    script:
+    """
+    plot-int-time.R $sc_quasar_file $castie_file
     """
 }
 
@@ -379,11 +577,181 @@ process PLOT_CONCORDANCE {
         val pb_quasar_file
         val sc_quasar_file
         val saigeqtl_file
-    output: path("concordance-plot.pdf")
+    output: tuple path("concordance-plot.pdf"),
+        path("concordance-lm-p_glmm_sc-plot.pdf")
 
     script:
     """
     plot-concordance.R $pb_quasar_file $sc_quasar_file $saigeqtl_file
+    """
+}
+
+process PLOT_UNIQUE_SC_EGENES {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        path("unique-p-glmm-egenes.tsv")
+
+    script:
+    """
+    plot-unique-sc-egenes.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_UNIQUE_SC_EGENE_FIGURES {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        tuple val(info), path(leads_tsv), path(sc_logcounts), path(genotype_dosages)
+    output:
+        path("unique-sc-egene-figures-${info.cell_type}.pdf")
+
+    script:
+    """
+    plot-unique-sc-egene-figures.R "$leads_tsv" "$sc_logcounts" "$genotype_dosages" "${info.cell_type}"
+    """
+}
+
+process PLOT_UNIQUE_PB_EGENES {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        path("unique-lm-egenes.tsv")
+
+    script:
+    """
+    plot-unique-pb-egenes.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_UNIQUE_PB_EGENE_FIGURES {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        tuple val(info), path(leads_tsv), path(sc_logcounts), path(genotype_dosages)
+    output:
+        path("unique-pb-egene-figures-${info.cell_type}.pdf")
+
+    script:
+    """
+    plot-unique-pb-egene-figures.R "$leads_tsv" "$sc_logcounts" "$genotype_dosages" "${info.cell_type}"
+    """
+}
+
+process PLOT_EGENE_SIG_MODEL {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        tuple path("egene-sig-model-forest-plot.pdf"),
+              path("egene-sig-model-logit.tsv")
+
+    script:
+    """
+    plot-egene-sig-model.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_POWER_CELL_FRAC {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        tuple path("power-cell-frac-counts-plot.pdf"),
+              path("power-cell-frac-recall-plot.pdf")
+
+    script:
+    """
+    plot-power-cell-frac.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_POWER_COUNT_FRAC {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        tuple path("power-count-frac-counts-plot.pdf"),
+              path("power-count-frac-recall-plot.pdf")
+
+    script:
+    """
+    plot-power-count-frac.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_POWER_INDIV_FRAC {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        tuple path("power-indiv-frac-counts-plot.pdf"),
+              path("power-indiv-frac-recall-plot.pdf")
+
+    script:
+    """
+    plot-power-indiv-frac.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_POWER_BOTH_FRAC {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        path "power-both-frac-heatmap.pdf"
+
+    script:
+    """
+    plot-power-both-frac.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_POWER_GENE_PROP {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        tuple path("power-gene-prop-sc-mean-plot.pdf"),
+              path("power-gene-prop-sc-var-plot.pdf"),
+              path("power-gene-prop-sc-cv-plot.pdf"),
+              path("power-gene-prop-sc-non-zero-frac-plot.pdf"),
+              path("power-gene-prop-pb-mean-plot.pdf"),
+              path("power-gene-prop-pb-var-plot.pdf"),
+              path("power-gene-prop-pb-cv-plot.pdf"),
+              path("power-gene-prop-pb-non-zero-frac-plot.pdf")
+
+    script:
+    """
+    plot-power-gene-prop.R $pb_quasar_file $sc_quasar_file
     """
 }
 
@@ -413,7 +781,7 @@ process COMPUTE_GENE_PROPERTIES {
 
     script:
     """
-    compute-gene-properties.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$adata" "$anno_file"
+    compute-gene-properties.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$adata" "$anno_file" "${info.n_cells_target}" "${info.count_frac}"
     mv "${info.cell_type}-gene-properties.tsv" "${info.dataset}-${info.cell_type}-gene-properties.tsv"
     """
 }

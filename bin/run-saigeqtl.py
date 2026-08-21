@@ -87,8 +87,8 @@ def main() -> int:
                 "--useGRMtoFitNULL=FALSE",
                 f"--phenoFile={args.input}",
                 f"--phenoCol={gene}",
-                "--covarColList=sex,age,PC_1,PC_2,geno_pc1,geno_pc2,geno_pc3,geno_pc4,geno_pc5,geno_pc6",
-                "--sampleCovarColList=sex,age,PC_1,PC_2,geno_pc1,geno_pc2,geno_pc3,geno_pc4,geno_pc5,geno_pc6",
+                "--covarColList=sex,age,PC_1,PC_2,PC_3,PC_4,PC_5,geno_pc1,geno_pc2,geno_pc3,geno_pc4,geno_pc5,geno_pc6",
+                "--sampleCovarColList=sex,age,PC_1,PC_2,PC_3,PC_4,PC_5,geno_pc1,geno_pc2,geno_pc3,geno_pc4,geno_pc5,geno_pc6",
                 "--sampleIDColinphenoFile=sample_id",
                 "--traitType=count",
                 f"--outputPrefix={output_prefix}-saigeqtl-step1",
@@ -100,6 +100,7 @@ def main() -> int:
                 "--tol=0.00001",
                 f"--plinkFile={args.subset_prefix}",
                 "--IsOverwriteVarianceRatioFile=TRUE",
+                "--offsetCol=log_cell_read_counts",
             ],
             env,
         )

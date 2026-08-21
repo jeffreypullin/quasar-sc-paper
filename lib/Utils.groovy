@@ -3,12 +3,12 @@ class Utils {
     static attachGeneProperties(ch, gene_properties) {
         ch
             .map { info, region, variant, time ->
-                [[dataset: info.dataset, cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac],
+                [[dataset: info.dataset, cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac, n_cells_target: info.n_cells_target, count_frac: info.count_frac],
                  info, region, variant, time]
             }
             .combine(
                 gene_properties.map { info, gp ->
-                    [[dataset: info.dataset, cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac], gp]
+                    [[dataset: info.dataset, cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac, n_cells_target: info.n_cells_target, count_frac: info.count_frac], gp]
                 },
                 by: 0
             )

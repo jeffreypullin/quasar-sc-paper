@@ -3,6 +3,8 @@
 import sys
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import scanpy as sc
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "code"))
@@ -21,6 +23,15 @@ sc.pp.log1p(subset)
 
 sc.tl.pca(subset)
 
-subset.obs = subset.obs[["cell_label", "individual"]].copy()
-
-subset.write_h5ad(f"{cell_type}-slingshot-input.h5ad")
+# Export PCA + labels as TSV. anndataR cannot reliably read scanpy h5ad
+# (nullable-string-array index + sparse X → SummarizedExperiment errors).
+n_pcs = subset.obsm["X_pca"].shape[1]
+pca = pd.DataFrame(
+    np.asarray(subset.obsm["X_pca"]),
+    index=subset.obs_names.astype(str),
+    columns=[f"PC{i}" for i in range(1, n_pcs + 1)],
+)
+out = pca.copy()
+out.insert(0, "cell_label", subset.obs["cell_label"].astype(str).to_numpy())
+out.insert(0, "cell_id", out.index)
+out.to_csv(f"{cell_type}-slingshot-input.tsv", sep="\t", index=False)

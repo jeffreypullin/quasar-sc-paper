@@ -12,6 +12,13 @@ res = (
     df.groupby("cell_label", sort=True)
     .agg(n_cells=("cell_label", "size"), n_indiv=("individual", pd.Series.nunique))
     .reset_index()
- )
+)
 
 res.to_csv("cluster-sizes.tsv", sep="\t", index=False)
+
+cells_per_indiv = (
+    df.groupby(["cell_label", "individual"], sort=True)
+    .size()
+    .reset_index(name="n_cells")
+)
+cells_per_indiv.to_csv("cells-per-indiv.tsv", sep="\t", index=False)

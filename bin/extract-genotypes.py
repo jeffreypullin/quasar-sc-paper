@@ -6,38 +6,19 @@ from pathlib import Path
 
 import pandas as pd
 
-# quasar snp_id format (chr:posREF-ALT); same as data/annotate-variants.txt
-VARIANTS = [
-    "12:56435929C-G",
-    "6:32608014T-C",
-    "1:157530620T-C",
-    "6:32651540C-T",
-    "1:161022639C-G",
-    "4:57630315A-G",
-    "2:69977251A-T",
-    "3:111253069T-C",
-    "4:86507528T-C",
-    "1:161702011C-T",
-    "7:94133800T-C",
-    "17:79473743G-A",
-    "3:121714019T-C",
-    "2:208524200A-G",
-    "3:27946389T-C",
-    "12:125179965T-C",
-    "22:42465260T-C",
-    "9:139648298G-A",
-    "20:46228667G-A",
-    "17:7207964A-C",
-    "8:146017782C-T",
-]
-
 META_COLS = {"FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"}
 
 plink_prefix = Path(sys.argv[1])
-out_path = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("genotype-dosages.tsv")
+variants_tsv = Path(sys.argv[2])
+out_path = Path(sys.argv[3]) if len(sys.argv) > 3 else Path("genotype-dosages.tsv")
 
+variants_df = pd.read_csv(variants_tsv, sep="\t")
+if "snp_id" not in variants_df.columns:
+    sys.exit(f"variants TSV must contain snp_id column; got: {', '.join(variants_df.columns)}")
+
+VARIANTS = list(dict.fromkeys(variants_df["snp_id"].dropna().astype(str).tolist()))
 if not VARIANTS:
-    sys.exit("VARIANTS is empty; add variant IDs at the top of extract-genotypes.py")
+    sys.exit("no snp_id values found in variants TSV")
 
 
 def quasar_snp_id(chrom: str, pos: str, a1: str, a2: str) -> str:

@@ -19,7 +19,7 @@ source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
 args <- commandArgs(trailingOnly = TRUE)
 
 sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
-  filter(int_cov == "pseudotime")
+  filter(int_cov != "none")
 
 compute_qq_data_int <- function(variant_files, prop_file, int_cov, type) {
 
@@ -34,7 +34,7 @@ compute_qq_data_int <- function(variant_files, prop_file, int_cov, type) {
   if (type == "main") {
     pvalue_col <- "snp_pvalue"
   } else if (type == "int") {
-    pvalue_col <- paste0("snp_x_", int_cov, "_perm_pvalue")
+    pvalue_col <- paste0("snp_x_", to_snake(int_cov), "_perm_pvalue")
   }
 
   prop_data <- read_tsv(prop_file, show_col_types = FALSE)
@@ -80,7 +80,7 @@ build_qq_plot_data <- function(data_files, type) {
     summarise(
       file_list = list(variant_file),
       prop_file = first(prop_file),
-      .by = c(cell_type, int_cov)
+      .by = c(cell_type, int_cov, model)
     ) |>
     rowwise() |>
     mutate(qq_data = list(compute_qq_data_int(file_list, prop_file, int_cov, type))) |>
@@ -101,7 +101,7 @@ int_p <- int_plot_data |>
   geom_point(alpha = 0.8) +
   geom_abline(linetype = "dashed") +
   geom_ribbon(linetype = 2, alpha = 0.1) +
-  facet_wrap(~source + cell_type + int_cov) +
+  facet_wrap(~source + cell_type + int_cov + model) +
   labs(
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)"
@@ -126,7 +126,7 @@ main_p <- main_plot_data |>
   geom_point(alpha = 0.8) +
   geom_abline(linetype = "dashed") +
   geom_ribbon(linetype = 2, alpha = 0.1) +
-  facet_wrap(~source + cell_type + int_cov) +
+  facet_wrap(~source + cell_type + int_cov + model) +
   labs(
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)"

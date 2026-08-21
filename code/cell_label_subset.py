@@ -11,8 +11,7 @@ import pandas as pd
 # matching scripts and key this dict by (dataset, cell_type) instead.
 COMBINED_MEMBERS: dict[str, tuple[str, ...]] = {
     "B_all": ("B IN", "B Mem"),
-    "CD4_T_all": ("CD4 NC", "CD4 ET", "CD4 SOX4"),
-    "CD8_T_all": ("CD8 ET", "CD8 NC", "CD8 S100B"),
+    "T_all": ("CD4 NC", "CD4 ET", "CD4 SOX4", "CD8 ET", "CD8 NC", "CD8 S100B"),
 }
 
 

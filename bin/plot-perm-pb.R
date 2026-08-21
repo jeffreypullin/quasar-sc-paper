@@ -19,6 +19,27 @@ args <- commandArgs(trailingOnly = TRUE)
 pb_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
   filter(int_cov == "none")
 
+#pb_data_files |>
+#  filter(model == "nb_glm") |>
+#  filter(cell_frac == 1) |>
+#  filter(indiv_frac == 1) |>
+#  filter(count_frac == 1) |>
+#  select(cell_type, variant_file) |>
+#  mutate(
+#    variant_data = map(
+#      variant_file,
+#      ~ read_tsv(.x, show_col_types = FALSE) |>
+#        select(feature_id, pvalue)
+#    )
+#  ) |>
+#  select(-variant_file) |>
+#  unnest(variant_data) |>
+#  filter(!is.na(pvalue), pvalue < 5e-10) |>
+#  distinct(cell_type, feature_id) |>
+#  arrange(cell_type, feature_id) |>
+#  print(n = Inf)
+#2 + "dsjlk"
+
 #b_in_prop_data <- pb_data_files |>
 #  filter(cell_type == "B_IN") |>
 #  slice(1) |>
@@ -126,6 +147,7 @@ pb_overall_plot_data <- pb_data_files |>
   filter(model == "nb_glm") |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
+  filter(count_frac == 1) |>
   summarise(
     file_list = list(variant_file),
     prop_file = first(prop_file),

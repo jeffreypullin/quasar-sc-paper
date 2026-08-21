@@ -1,0 +1,11 @@
+name: sctransform
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base
+  - r-sctransform
+  - r-hdf5r
+  - r-matrix
+  - r-readr
+  - r-data.table

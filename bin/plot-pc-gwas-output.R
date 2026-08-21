@@ -10,6 +10,7 @@ suppressPackageStartupMessages({
 args <- commandArgs(trailingOnly = TRUE)
 
 pc_gwas_data_files <- read_tsv(args[1], show_col_types = FALSE)
+pc_sc_gwas_data_files <- read_tsv(args[2], show_col_types = FALSE)
 
 pc_col_types <- cols(
   feature_id = col_character(),
@@ -24,7 +25,7 @@ pc_col_types <- cols(
   pvalue = col_double()
 )
 
-pc_gwas_data <- pc_gwas_data_files |>
+pc_gwas_data <- bind_rows(pc_gwas_data_files, pc_sc_gwas_data_files) |>
   rowwise() |>
   mutate(var_data = list(read_tsv(
     sig_variant_file,
@@ -33,10 +34,10 @@ pc_gwas_data <- pc_gwas_data_files |>
   ))) |>
   ungroup() |>
   unnest(var_data) |>
-  select(cell_type, feature_id, snp_id, chrom, pos, maf, beta, pvalue)
+  select(cell_type, model, feature_id, snp_id, chrom, pos, maf, beta, pvalue)
 
-plot_pc_gwas_manhattan <- function(data, ct, out_file) {
-  cell_data <- data |> filter(cell_type == ct)
+plot_pc_gwas_manhattan <- function(data, ct, model_name, out_file) {
+  cell_data <- data |> filter(cell_type == ct, model == model_name)
 
   chrom_levels <- unique(cell_data$chrom)
   chrom_levels <- chrom_levels[order(
@@ -66,7 +67,7 @@ plot_pc_gwas_manhattan <- function(data, ct, out_file) {
     labs(
       x = "Chromosome",
       y = expression(-log[10](p)),
-      title = paste0(ct, " single-cell PC GWAS by principal component")
+      title = paste0(ct, " PC GWAS (", model_name, ") by principal component")
     ) +
     theme_bw() +
     theme(
@@ -87,18 +88,20 @@ plot_pc_gwas_manhattan <- function(data, ct, out_file) {
   )
 }
 
-plot_pc_gwas_manhattan(pc_gwas_data, "B_IN", "pc-gwas-B_IN-plot.pdf")
-plot_pc_gwas_manhattan(pc_gwas_data, "CD4_NC", "pc-gwas-CD4_NC-plot.pdf")
+plot_pc_gwas_manhattan(pc_gwas_data, "B_IN", "lm", "pc-gwas-B_IN-plot.pdf")
+plot_pc_gwas_manhattan(pc_gwas_data, "CD4_NC", "lm", "pc-gwas-CD4_NC-plot.pdf")
+plot_pc_gwas_manhattan(pc_gwas_data, "B_IN", "lmm_sc", "pc-gwas-lmm_sc-B_IN-plot.pdf")
+plot_pc_gwas_manhattan(pc_gwas_data, "CD4_NC", "lmm_sc", "pc-gwas-lmm_sc-CD4_NC-plot.pdf")
 
 gws_pval_threshold <- 5e-8
 
 lead_variants <- pc_gwas_data |>
   filter(!is.na(pvalue), pvalue > 0) |>
-  group_by(cell_type, feature_id, chrom) |>
+  group_by(cell_type, model, feature_id, chrom) |>
   slice_min(order_by = pvalue, n = 1, with_ties = FALSE) |>
   ungroup() |>
   filter(pvalue < gws_pval_threshold) |>
-  arrange(cell_type, feature_id, chrom, pvalue)
+  arrange(model, cell_type, feature_id, chrom, pvalue)
 
 write_tsv(lead_variants, "pc-gwas-gws-leads.tsv")
 

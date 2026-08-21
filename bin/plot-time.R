@@ -34,20 +34,25 @@ saigeqtl_time_data <- saigeqtl_data_files |>
   summarise(
     step1_time = sum(step1_time),
     step2_time = sum(step2_time),
+    step3_time = sum(step3_time),
     .by = cell_type) |>
-  mutate(time = step1_time + step2_time) |>
+  mutate(time = step1_time + step2_time + step3_time) |>
   mutate(cell_frac = 1, indiv_frac = 1)
 
 sc_time_data <- sc_data_files |>
   filter(indiv_frac == 1) |>
+  filter(n_cells_target < 0) |>
+  filter(count_frac == 1) |>
   filter(cov_spec == "bulk_pca") |>
   rowwise() |>
   mutate(time = read_time(time_file)) |>
   ungroup() |>
-  summarise(time = sum(time), .by = c(cell_type, cell_frac, indiv_frac))
+  summarise(time = sum(time), .by = c(cell_type, cell_frac, indiv_frac, model))
 
 pb_time_data <- pb_data_files |>
   filter(indiv_frac == 1) |>
+  filter(n_cells_target < 0) |>
+  filter(count_frac == 1) |>
   rowwise() |>
   mutate(time = read_time(time_file)) |>
   ungroup() |>
@@ -57,7 +62,7 @@ plot_data <- bind_rows(
   saigeqtl_time_data |>
     mutate(type = "saigeqtl"),
   sc_time_data |>
-    mutate(type = "sc"),
+    mutate(type = paste0("sc-", model)),
   pb_time_data |>
     mutate(type = paste0("pb-", model)) |>
     select(-model),
@@ -66,31 +71,59 @@ plot_data <- bind_rows(
 quasar_p <- plot_data |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
+  filter(cell_type %in% c("Plasma", "B_IN", "CD4_NC")) |>
   filter(type != "saigeqtl") |>
-  mutate(cell_type = fct_reorder(factor(cell_type), time)) |>
-  ggplot(aes(cell_type, time, fill = type)) +
+  filter(type != "pb-nb_glm") |>
+  filter(type %in% names(method_lookup)) |>
+  mutate(
+    cell_type = factor(
+      cell_type_lookup[cell_type],
+      levels = cell_type_lookup[c("CD4_NC", "B_IN", "Plasma")]
+    ),
+    type = method_lookup[type]
+  ) |>
+  mutate(
+    cell_type = fct_reorder(cell_type, time, .fun = max),
+    type = fct_reorder(factor(type), time, .fun = sum),
+    hours = time / (60 * 60)
+  ) |>
+  ggplot(aes(cell_type, hours, fill = type)) +
   geom_col(position = "dodge2") +
   coord_flip() +
-  scale_y_continuous(labels = label_timespan())
+  scale_y_continuous(breaks = breaks_width(1)) +
+  labs(
+    x = "Cell type",
+    y = "Time (h)",
+    fill = "Method"
+  ) +
+  scale_fill_manual(values = method_col_lookup) +
+  theme_jp_vgrid() +
+  theme(legend.position = "right")
 
 ggsave(
   "time-quasar-plot.pdf",
   quasar_p,
-  width = 12,
-  height = 10
+  width = 14,
+  height = 6
 )
 
 comparison_p <- plot_data |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
-  mutate(cell_type = fct_reorder(factor(cell_type), time)) |>
   filter(cell_type %in% c("Plasma", "B_IN", "CD4_NC")) |>
-  filter(type %in% c("sc", "saigeqtl")) |>
+  filter(type %in% names(method_lookup)) |>
+  filter(type != "pb-nb_glm") |>
+  filter(type != "pb-lm") |>
   mutate(
-    type = case_when(
-      type == "sc" ~ "quasar",
-      type == "saigeqtl" ~ "SAIGE-QTL",
-    )
+    cell_type = factor(
+      cell_type_lookup[cell_type],
+      levels = cell_type_lookup[c("CD4_NC", "B_IN", "Plasma")]
+    ),
+    type = method_lookup[type]
+  ) |>
+  mutate(
+    cell_type = fct_reorder(cell_type, time, .fun = max),
+    type = fct_reorder(factor(type), time, .fun = sum)
   ) |>
   ggplot(aes(cell_type, time, fill = type)) +
   geom_col(position = "dodge2") +
@@ -104,15 +137,13 @@ comparison_p <- plot_data |>
     y = "Time",
     fill = "Method"
   ) +
-  scale_fill_manual(
-    values = c("quasar" = "#228833", "SAIGE-QTL" = "#66CCEE")
-  ) +
+  scale_fill_manual(values = method_col_lookup) +
   theme_jp_vgrid()
 
 ggsave(
   "time-method-comparison-plot.pdf",
   comparison_p,
-  width = 12,
+  width = 16,
   height = 10
 )
 

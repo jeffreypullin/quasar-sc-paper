@@ -21,7 +21,7 @@ if ("pvalue" %in% colnames(variant_data)) {
 
 n_sig_variant_data <- variant_data |>
   left_join(
-    gene_props_data |> 
+    gene_props_data |>
       select(feature_id, pb_non_zero_frac),
     by = "feature_id"
   ) |>

@@ -37,15 +37,19 @@ saigeqtl_n_sig_gene_data <- saigeqtl_data_files |>
 
 sc_n_sig_gene_data <- sc_data_files |>
   filter(indiv_frac == 1) |>
+  filter(n_cells_target < 0) |>
+  filter(count_frac == 1) |>
   rowwise() |>
   mutate(test = list(read_tsv(region_file, show_col_types = FALSE))) |>
   unnest(test) |>
   summarise(
     n_sig_gene = sum(p.adjust(pvalue, method = "BH") < 0.05, na.rm = TRUE),
-    .by = c(cell_type, cov_spec, cell_frac)
+    .by = c(cell_type, cov_spec, cell_frac, model)
   )
 
 gene_prop_data <- pb_data_files |>
+  filter(n_cells_target < 0) |>
+  filter(count_frac == 1) |>
   rowwise() |>
   mutate(
     gene_data = list(read_tsv(gene_prop_file, show_col_types = FALSE)),
@@ -54,6 +58,10 @@ gene_prop_data <- pb_data_files |>
   distinct(feature_id, cell_type, model, .keep_all = TRUE)
 
 pb_n_sig_gene_data <- pb_data_files |>
+  filter(indiv_frac == 1) |>
+  filter(n_cells_target < 0) |>
+  filter(count_frac == 1) |>
+  filter(int_cov == "none") |>
   rowwise() |>
   mutate(
     test = list(read_tsv(region_file, show_col_types = FALSE)),
@@ -72,19 +80,23 @@ pb_n_sig_gene_data <- pb_data_files |>
 
 sc_n_sig_var_data <- sc_data_files |>
   filter(indiv_frac == 1) |>
+  filter(n_cells_target < 0) |>
+  filter(count_frac == 1) |>
   rowwise() |>
   mutate(n_sig_variant = list(read_tsv(power_file, show_col_types = FALSE))) |>
   unnest(n_sig_variant) |>
-  summarise(n_sig_variant = sum(n_sig_variant), .by = c(cell_type, cell_frac, cov_spec))
+  summarise(n_sig_variant = sum(n_sig_variant), .by = c(cell_type, cell_frac, cov_spec, model))
 
 pb_n_sig_var_data <- pb_data_files |>
   filter(indiv_frac == 1) |>
+  filter(n_cells_target < 0) |>
+  filter(count_frac == 1) |>
   rowwise() |>
   mutate(n_sig_variant = list(read_tsv(power_file, show_col_types = FALSE))) |>
   unnest(n_sig_variant) |>
   summarise(n_sig_variant = sum(n_sig_variant), .by = c(cell_type, model, cell_frac))
 
-p_variant <- bind_rows(
+variant_plot_data <- bind_rows(
   pb_n_sig_var_data |>
     filter(cell_frac == 1) |>
     summarise(n_sig_variant = sum(n_sig_variant), .by = c(cell_type, model)) |>
@@ -93,55 +105,84 @@ p_variant <- bind_rows(
   sc_n_sig_var_data |>
     filter(cell_frac == 1) |>
     filter(cov_spec == "bulk_pca") |>
-    summarise(n_sig_variant = sum(n_sig_variant), .by = c(cell_type)) |>
-    mutate(type = "sc"),
+    summarise(n_sig_variant = sum(n_sig_variant), .by = c(cell_type, model)) |>
+    mutate(type = paste0("sc-", model)),
   saigeqtl_n_sig_var_data |>
     mutate(type = "saigeqtl")
 ) |>
   filter(cell_type %in% c("Plasma", "B_IN", "CD4_NC")) |>
-  mutate(type = case_when(
-    type == "sc" ~ "Single-cell quasar",
-    type == "pb-nb_glm" ~ "Pseudobulk NB-GLM quasar"
-  )) |>
-  mutate(cell_type = fct_reorder(factor(cell_type), n_sig_variant)) |>
-  ggplot(aes(cell_type, n_sig_variant, fill = type)) +
-  geom_col(position = "dodge2") +
-  labs(
-    y = "Number of signficant variants",
-    x = "Cell type"
-  ) + 
-  scale_fill_manual(values = c(
-    "Single-cell quasar" = "#228833", 
-    "Pseudobulk NB-GLM quasar" = "#EE6677")
-  ) +
-  coord_flip() + 
-  theme_jp_vgrid()
+  filter(type %in% names(method_lookup)) |>
+  mutate(
+    cell_type = cell_type_lookup[cell_type],
+    type = method_lookup[type]
+  ) |>
+  mutate(
+    cell_type = fct_reorder(factor(cell_type), n_sig_variant, .fun = max),
+    type = fct_reorder(factor(type), n_sig_variant, .fun = sum)
+  )
 
-p_gene <- bind_rows(
+method_levels <- levels(variant_plot_data$type)
+
+gene_plot_data <- bind_rows(
   pb_n_sig_gene_data |>
     filter(cell_frac == 1) |>
     mutate(type = paste0("pb-", model)),
   sc_n_sig_gene_data |>
     filter(cell_frac == 1) |>
     filter(cov_spec == "bulk_pca") |>
-    mutate(type = "sc"),
+    mutate(type = paste0("sc-", model)),
   saigeqtl_n_sig_gene_data |>
     mutate(type = "saigeqtl")
 ) |>
   filter(cell_type %in% c("Plasma", "B_IN", "CD4_NC")) |>
-  mutate(cell_type = fct_reorder(factor(cell_type), n_sig_gene)) |>
-  ggplot(aes(cell_type, n_sig_gene, fill = type)) +
+  filter(type %in% names(method_lookup)) |>
+  mutate(
+    cell_type = cell_type_lookup[cell_type],
+    type = factor(method_lookup[type], levels = method_levels)
+  ) |>
+  mutate(cell_type = fct_reorder(factor(cell_type), n_sig_gene, .fun = max))
+
+p_variant <- variant_plot_data |>
+  ggplot(aes(cell_type, n_sig_variant, fill = type)) +
   geom_col(position = "dodge2") +
+  scale_fill_manual(
+    values = method_col_lookup,
+    drop = FALSE,
+    guide = guide_legend(reverse = TRUE)
+  ) +
+  labs(
+    y = "Number of significant variants",
+    x = "Cell type",
+    fill = "Method"
+  ) +
   coord_flip() +
   theme_jp_vgrid()
 
-p <- p_variant + p_gene
+p_gene <- gene_plot_data |>
+  ggplot(aes(cell_type, n_sig_gene, fill = type)) +
+  geom_col(position = "dodge2") +
+  scale_fill_manual(values = method_col_lookup, drop = FALSE) +
+  labs(
+    y = "Number of significant genes",
+    x = NULL,
+    fill = "Method"
+  ) +
+  coord_flip() +
+  theme_jp_vgrid() +
+  guides(fill = "none")
+
+p <- p_variant + p_gene +
+  plot_layout(guides = "collect") &
+  theme(
+    legend.position = "right",
+    axis.text = element_text(size = 18)
+  )
 
 ggsave(
   "power-method-comparison-plot.pdf",
   plot = p,
-  width = 12,
-  height = 8
+  width = 16,
+  height = 10
 )
 
 #frac_p <- sc_n_sig_var_data |>
@@ -161,7 +202,6 @@ ggsave(
   width = 12,
   height = 8
 )
-
 #non_zero_p <- sc_n_sig_var_data |>
 #  filter(cell_frac == 1) |>
 #  filter(cov_spec == "bulk_pca") |>
@@ -179,3 +219,4 @@ ggsave(
   width = 12,
   height = 8
 )
+
