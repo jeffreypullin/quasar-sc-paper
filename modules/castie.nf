@@ -1,6 +1,6 @@
 
 process COLLATE_CASTIE_INPUT {
-  label "high_mem"
+  label "mega_mem"
 
   input: tuple val(info), val(sc_counts), val(covs), val(bed), val(anno)
   output: tuple val(info), path("${info.dataset}-${info.cell_type.replaceAll(/\s+/, '-')}-${info.chr}-${info.data_type}-castie-input.tsv"), val(bed), val(anno)
@@ -14,7 +14,8 @@ process COLLATE_CASTIE_INPUT {
     "$sc_counts" \
     "$covs" \
     "$anno" \
-    "$safe"
+    "$safe" \
+    "$info.int_cov"
   mv "${safe}-${info.chr}-castie-input.tsv" "${info.dataset}-${safe}-${info.chr}-${info.data_type}-castie-input.tsv"
   """
 }
@@ -38,6 +39,7 @@ process RUN_CASTIE {
         --chr-prefix "$chr_prefix" \
         --anno "$anno" \
         --data-type "$info.data_type" \
+        --int-cov "$info.int_cov" \
         --castie-dir "$projectDir/CASTIE" \
         --n-threads ${task.cpus}
     rationalise-castie-files.R *-castie-files.tsv

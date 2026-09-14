@@ -4,78 +4,76 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(readr)
   library(data.table)
-  library(ggplot2)
-  library(forcats)
-  library(patchwork)
-  library(qvalue)
   library(purrr)
-  library(stringr)
   library(tidyr)
-  library(ggh4x)
 })
+
+source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
 
 args <- commandArgs(trailingOnly = TRUE)
 
-pb_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
-  filter(int_cov != "none")
+keep_full <- function(data) {
+  data <- filter(data, int_cov != "none", cell_frac == 1, indiv_frac == 1)
+  if ("count_frac" %in% names(data)) {
+    data <- filter(data, count_frac == 1)
+  }
+  if ("n_cells_target" %in% names(data)) {
+    data <- filter(data, n_cells_target < 0)
+  }
+  data
+}
 
-pb_data_files |>
-  filter(int_cov == "age") |>
-  rowwise() |>
-  mutate(gene_tbl = list(read_tsv(region_file, show_col_types = FALSE))) |>
-  unnest(gene_tbl) |>
+int_acat_col <- function(nms, int_cov) {
+  preferred <- paste0("int_", to_snake(int_cov), "_acat_pvalue")
+  if (preferred %in% nms) {
+    return(preferred)
+  }
+  if ("int_acat_pvalue" %in% nms) {
+    return("int_acat_pvalue")
+  }
+  NA_character_
+}
+
+pb_data_files <- keep_full(read_tsv(args[[1]], show_col_types = FALSE))
+
+region_data <- if (nrow(pb_data_files) == 0) {
+  tibble(
+    cell_type = character(),
+    model = character(),
+    int_cov = character(),
+    feature_id = character(),
+    int_acat_pvalue = double()
+  )
+} else {
+  pb_data_files |>
+    mutate(
+      gene_tbl = map2(region_file, int_cov, function(path, cov) {
+        dt <- fread(path, showProgress = FALSE)
+        col <- int_acat_col(names(dt), cov)
+        if (is.na(col) || nrow(dt) == 0L) {
+          return(tibble(feature_id = character(), int_acat_pvalue = double()))
+        }
+        tibble(
+          feature_id = as.character(dt$feature_id),
+          int_acat_pvalue = as.numeric(dt[[col]])
+        )
+      })
+    ) |>
+    select(cell_type, model, int_cov, gene_tbl) |>
+    unnest(gene_tbl)
+}
+
+int_egenes <- region_data |>
+  filter(!is.na(feature_id), feature_id != "", !is.na(int_acat_pvalue)) |>
+  group_by(cell_type, model, int_cov, feature_id) |>
+  slice_min(int_acat_pvalue, n = 1, with_ties = FALSE) |>
   ungroup() |>
   mutate(
-    bh = p.adjust(int_acat_pvalue, method = "BH"),
-    .by = c(cell_type)
+    int_acat_bh = p.adjust(int_acat_pvalue, method = "BH"),
+    .by = c(cell_type, model, int_cov)
   ) |>
-  filter(bh < 0.25) |>
-  select(cell_type, feature_id, bh) |>
-  arrange(bh)
+  filter(int_acat_bh < 0.05) |>
+  arrange(cell_type, model, int_cov, int_acat_bh) |>
+  select(cell_type, model, int_cov, feature_id, int_acat_pvalue, int_acat_bh)
 
-2 + "fdjlks"
-
-pb_data_files |>
-  filter(int_cov == "age") |>
-  rowwise() |>
-  mutate(var_tbl = list(read_tsv(variant_file, show_col_types = FALSE))) |>
-  unnest(var_tbl) |>
-  filter(snp_x_age_pvalue < 5e-6) |>
-  select(cell_type, feature_id, snp_id, snp_pvalue, snp_x_age_pvalue) |>
-  distinct(feature_id, .keep_all = TRUE) |>
-  arrange(snp_x_age_pvalue) |>
-  print(n = 50)
-
-2 + "fdskl"
-
-pb_sig_sex_genes <- pb_data_files |>
-  filter(int_cov == "sex") |>
-  rowwise() |>
-  mutate(gene_tbl = list(read_tsv(region_file, show_col_types = FALSE))) |>
-  unnest(gene_tbl) |>
-  ungroup() |>
-  mutate(
-    bh = p.adjust(int_acat_pvalue, method = "BH"),
-    .by = c(cell_type)
-  ) |>
-  filter(bh < 0.01) |>
-  select(cell_type, feature_id, bh) |>
-  arrange(bh)
-
-pb_data_files |>
-  filter(int_cov == "age") |>
-  rowwise() |>
-  mutate(gene_tbl = list(read_tsv(region_file, show_col_types = FALSE))) |>
-  unnest(gene_tbl) |>
-  ungroup() |>
-  mutate(
-    bh = p.adjust(main_acat_pvalue, method = "BH"),
-    .by = c(cell_type)
-  ) |>
-  filter(bh < 0.01) |>
-  select(cell_type, feature_id, bh) |>
-  arrange(bh) |>
-  print(n = 20)
-
-
-2 + "fdjsl"
+write_tsv(int_egenes, "int-res-egenes.tsv")

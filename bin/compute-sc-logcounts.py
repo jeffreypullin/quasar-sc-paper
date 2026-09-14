@@ -65,18 +65,41 @@ cell_type_subset = binomial_downsample_counts(
 sc.pp.normalize_total(cell_type_subset)
 sc.pp.log1p(cell_type_subset)
 
-Xf = cell_type_subset.X
-if sp.issparse(Xf):
-    Xf = Xf.toarray()
+# Stream the TSV in row chunks so the logcount matrix is never fully densified.
+CHUNK_ROWS = 1000
+out_path = f"{cell_type}-sc-logcounts.tsv"
 
-logcounts_df = pd.DataFrame(
-    Xf,
-    index=cell_type_subset.obs['individual'],
-    columns=cell_type_subset.var_names
+X = cell_type_subset.X
+if sp.issparse(X):
+    X = X.tocsr()
+
+meta = pd.DataFrame(
+    {"cell_id": cell_type_subset.obs.index.to_numpy()},
+    index=cell_type_subset.obs["individual"].to_numpy(),
 )
+meta.index.name = "sample_id"
+meta["_row"] = np.arange(meta.shape[0])
+meta.sort_index(inplace=True)
 
-logcounts_df.insert(0, 'cell_id', cell_type_subset.obs.index.to_numpy())
-logcounts_df.sort_index(inplace=True)
-logcounts_df.index.name = 'sample_id'
+genes = cell_type_subset.var_names
+header = pd.DataFrame(
+    index=pd.Index([], name="sample_id"),
+    columns=["cell_id", *list(genes)],
+)
+header.to_csv(out_path, sep="\t")
 
-logcounts_df.to_csv(f"{cell_type}-sc-logcounts.tsv", sep='\t')
+order = meta["_row"].to_numpy()
+sample_ids = meta.index.to_numpy()
+cell_ids = meta["cell_id"].to_numpy()
+n = order.size
+for start in range(0, n, CHUNK_ROWS):
+    stop = min(start + CHUNK_ROWS, n)
+    rows = order[start:stop]
+    if sp.issparse(X):
+        block = X[rows, :].toarray()
+    else:
+        block = np.asanyarray(X)[rows, :]
+    chunk = pd.DataFrame(block, index=sample_ids[start:stop], columns=genes)
+    chunk.insert(0, "cell_id", cell_ids[start:stop])
+    chunk.index.name = "sample_id"
+    chunk.to_csv(out_path, sep="\t", mode="a", header=False)

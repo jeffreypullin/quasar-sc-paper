@@ -12,7 +12,10 @@ pb_covs <- read_tsv(args[[2]], show_col_types = FALSE)
 sc_expr_covs <- read_tsv(args[[3]], show_col_types = FALSE)
 int_cov_data <- read_tsv(args[[4]], show_col_types = FALSE)
 
-if ("Lineage1" %in% names(int_cov_data)) {
+if ("pseudotime" %in% names(int_cov_data)) {
+  int_cov_data <- int_cov_data |>
+    select(cell_id, pseudotime)
+} else if ("Lineage1" %in% names(int_cov_data)) {
   int_cov_data <- int_cov_data |>
     rename(pseudotime = Lineage1) |>
     select(-any_of("cell_label"))

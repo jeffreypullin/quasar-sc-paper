@@ -38,7 +38,10 @@ process CONVERT_VCF_TO_BED {
     label "tiny"
 
     input: tuple val(dataset), val(chr), val(vcf), val(vcf_tbi)
-    output: tuple val(dataset), val(chr), path("${dataset}-${chr}.bed")
+    output: tuple val(dataset), val(chr),
+        path("${dataset}-${chr}.bed"),
+        path("${dataset}-${chr}.bim"),
+        path("${dataset}-${chr}.fam")
 
     shell:
     '''
@@ -73,7 +76,10 @@ process CONCAT_BED_FILES {
     label "tiny"
 
     input: tuple val(dataset), val(bed_files)
-    output: tuple val(dataset), path("${dataset}-all.bed")
+    output: tuple val(dataset),
+        path("${dataset}-all.bed"),
+        path("${dataset}-all.bim"),
+        path("${dataset}-all.fam")
 
     script:
     """
@@ -388,16 +394,16 @@ process CREATE_GRM {
 }
 
 process PREPARE_SLINGSHOT_ADATA {
-    conda "$projectDir/envs/scanpy.yaml"
-    label "high_mem"
+    conda "$projectDir/envs/prepare-slingshot.yaml"
+    label "long_mega_mem"
 
     input: tuple val(info), val(raw_sc_data)
-    output: tuple val(info), path("${info.dataset}-${info.cell_type}-slingshot-input.tsv")
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-slingshot-input.tsv.gz")
 
     script:
     """
-    prepare-slingshot-adata.py "${info.cell_type}" "$raw_sc_data"
-    mv "${info.cell_type}-slingshot-input.tsv" "${info.dataset}-${info.cell_type}-slingshot-input.tsv"
+    prepare-slingshot-adata.R "${info.cell_type}" "$raw_sc_data"
+    mv "${info.cell_type}-slingshot-input.tsv.gz" "${info.dataset}-${info.cell_type}-slingshot-input.tsv.gz"
     """
 }
 

@@ -12,3 +12,7 @@ dependencies:
   - r-hdf5r
   - r-ggplot2
   - r-readr
+  - r-phater
+  - r-reticulate
+  - python
+  - phate

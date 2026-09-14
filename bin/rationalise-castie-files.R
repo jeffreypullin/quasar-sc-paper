@@ -17,6 +17,11 @@ data_type <- if ("data_type" %in% names(input_tsv)) {
 } else {
   NA_character_
 }
+int_cov <- if ("int_cov" %in% names(input_tsv)) {
+  as.character(input_tsv$int_cov[[1]])
+} else {
+  "pseudotime"
+}
 gene_list <- str_replace(
   args[[1]],
   "^(.+?)-\\1-(genes-\\d+\\.txt).*$",
@@ -87,7 +92,7 @@ result_tibble <- tibble(
   cell_type = cell_type,
   model = "castie",
   data_type = data_type,
-  int_cov = "pseudotime",
+  int_cov = int_cov,
   k = "none",
   chrom = chrom,
   gene_list = gene_list,

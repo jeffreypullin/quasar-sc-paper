@@ -8,7 +8,6 @@ import time
 from pathlib import Path
 
 SAMPLE_COVARS = "sex,age,PC_1,PC_2,geno_pc1,geno_pc2,geno_pc3,geno_pc4,geno_pc5,geno_pc6"
-ALL_COVARS = SAMPLE_COVARS + ",pseudotime"
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,6 +24,7 @@ def parse_args() -> argparse.Namespace:
         default="/home/jp2045/quasar-sc-paper/CASTIE",
     )
     parser.add_argument("--data-type", default="counts")
+    parser.add_argument("--int-cov", default="pseudotime")
     parser.add_argument("--n-threads", type=int, default=8)
     return parser.parse_args()
 
@@ -87,6 +87,8 @@ def main() -> int:
 
     gene_list_tag = safe_tag(Path(args.gene_list).name)
     data_type_tag = safe_tag(args.data_type)
+    int_cov = args.int_cov
+    all_covars = SAMPLE_COVARS + "," + int_cov
     manifest_path = Path(
         f"{safe_tag(args.cell_type)}-{safe_tag(args.chrom)}-{data_type_tag}-{gene_list_tag}-castie-files.tsv"
     )
@@ -107,9 +109,9 @@ def main() -> int:
                 "--useGRMtoFitNULL=FALSE",
                 f"--phenoFile={args.input}",
                 f"--phenoCol={gene}",
-                f"--covarColList={ALL_COVARS}",
+                f"--covarColList={all_covars}",
                 f"--sampleCovarColList={SAMPLE_COVARS}",
-                "--dynamicCovarColList=pseudotime",
+                f"--dynamicCovarColList={int_cov}",
                 "--sampleIDColinphenoFile=sample_id",
                 "--traitType=count",
                 f"--outputPrefix={output_prefix}-castie-step1",
@@ -175,6 +177,7 @@ def main() -> int:
                 "cell_type": args.cell_type,
                 "chrom": args.chrom,
                 "data_type": args.data_type,
+                "int_cov": int_cov,
                 "gene": gene,
                 "variant_file": str(variant_file.resolve()) if variant_file.exists() else "NA",
                 "step1_time": step1_time,
@@ -193,7 +196,7 @@ def main() -> int:
                 str(Path(args.castie_dir) / "extdata" / "concat_step2_results.py"),
                 "--input-dir=.",
                 "--output=step3_input.txt",
-                "--contexts=pseudotime",
+                f"--contexts={int_cov}",
                 "--file-pattern=*_cis",
                 "--gene-regex=^(?P<gene>.+)_cis$",
                 "--maf-min=0",
@@ -230,6 +233,7 @@ def main() -> int:
                 "cell_type",
                 "chrom",
                 "data_type",
+                "int_cov",
                 "gene",
                 "variant_file",
                 "region_file",

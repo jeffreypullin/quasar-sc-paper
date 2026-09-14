@@ -22,6 +22,44 @@ sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
   filter(int_cov != "none", k == "none") |>
   filter(cell_frac == 1, indiv_frac == 1)
 
+qq_bins <- function(pvalue, int_term) {
+  pvalue <- pvalue[!is.na(pvalue)]
+  n <- length(pvalue)
+  if (n == 0) {
+    return(tibble())
+  }
+  m <- (1:n) / (n + 1)
+  c <- abs(qnorm(0.05 / 2))
+  v <- (1:n) * (n - (1:n) + 1) / (n + 1)^2 / (n + 2)
+  s <- sqrt(v)
+  log_x_pvalue <- -log10(m)
+  x_bin <- cut(
+    log_x_pvalue,
+    breaks = seq(0, 6, by = 0.1),
+    include.lowest = TRUE
+  )
+  tibble(
+    x_bin,
+    y_pvalue = sort(pvalue),
+    lower_ci = m - c * s,
+    upper_ci = m + c * s
+  ) |>
+    summarise(
+      log_y_pvalue = -log10(mean(y_pvalue)),
+      log_lower_ci = -log10(mean(lower_ci)),
+      log_upper_ci = -log10(mean(upper_ci)),
+      .by = c(x_bin)
+    ) |>
+    mutate(
+      log_x_bin_mid = seq(0.05, 5.95, by = 0.1)[as.numeric(x_bin)],
+      int_term = int_term
+    )
+}
+
+int_pvalue_cols <- function(nms) {
+  nms[str_detect(nms, "^snp_x_.*_pvalue$") & !str_detect(nms, "_perm_pvalue$")]
+}
+
 compute_qq_data_int <- function(variant_files, prop_file, int_cov, type) {
 
   variant_data <- bind_rows(!!!map(
@@ -32,46 +70,18 @@ compute_qq_data_int <- function(variant_files, prop_file, int_cov, type) {
     })
   )
 
+  prop_data <- read_tsv(prop_file, show_col_types = FALSE)
+  pvalue_data <- left_join(variant_data, prop_data, by = "feature_id")
+
   if (type == "main") {
-    pvalue_col <- "snp_pvalue"
-  } else if (type == "int") {
-    pvalue_col <- paste0("snp_x_", to_snake(int_cov), "_pvalue")
+    return(qq_bins(pvalue_data$snp_pvalue, int_cov))
   }
 
-  prop_data <- read_tsv(prop_file, show_col_types = FALSE)
-
-  pvalue_data <- left_join(
-    variant_data,
-    prop_data,
-    by = "feature_id"
-  )
-
-  pvalue <- pvalue_data[[pvalue_col]]
-  pvalue <- pvalue[!is.na(pvalue)]
-  n <- length(pvalue)
-  m <- (1:n) / (n + 1)
-  c <- abs(qnorm(0.05 / 2))
-  v <- (1:n) * (n - (1:n) + 1) / (n + 1)^2 / (n + 2)
-  s <- sqrt(v)
-  lower_ci <- m - c * s
-  upper_ci <- m + c * s
-
-  log_x_pvalue <- -log10(m)
-  y_pvalue <- sort(pvalue)
-  x_bin <- cut(
-    log_x_pvalue,
-    breaks = seq(0, 6, by = 0.1),
-    include.lowest = TRUE
-  )
-
-  tibble(x_bin, y_pvalue, lower_ci, upper_ci) |>
-    summarise(
-      log_y_pvalue = -log10(mean(y_pvalue)),
-      log_lower_ci = -log10(mean(lower_ci)),
-      log_upper_ci = -log10(mean(upper_ci)),
-      .by = c(x_bin)
-    ) |>
-    mutate(log_x_bin_mid = seq(0.05, 5.95, by = 0.1)[as.numeric(x_bin)])
+  pvalue_cols <- int_pvalue_cols(names(pvalue_data))
+  map_dfr(pvalue_cols, function(pvalue_col) {
+    int_term <- str_remove(str_remove(pvalue_col, "^snp_x_"), "_pvalue$")
+    qq_bins(pvalue_data[[pvalue_col]], int_term)
+  })
 }
 
 build_qq_plot_data <- function(data_files, type) {
@@ -98,23 +108,24 @@ int_plot_data <- bind_rows(sc_int_plot_data)
 int_p <- int_plot_data |>
   ggplot(aes(log_x_bin_mid, log_y_pvalue,
              ymin = log_lower_ci, ymax = log_upper_ci,
-             colour = source)) +
+             colour = int_cov, fill = int_cov)) +
   geom_point(alpha = 0.8) +
   geom_abline(linetype = "dashed") +
   geom_ribbon(linetype = 2, alpha = 0.1) +
-  facet_wrap(~source + cell_type + int_cov + model) +
+  facet_wrap(~cell_type + int_term + int_cov + model) +
   labs(
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)",
-    colour = "Source"
+    colour = "Analysis",
+    fill = "Analysis"
   ) +
   theme_jp()
 
 ggsave(
   "perm-sc-int-global-plot.pdf",
   int_p,
-  width = 12,
-  height = 10
+  width = 16,
+  height = 18
 )
 
 sc_main_plot_data <- build_qq_plot_data(sc_data_files, "main") |>
@@ -128,11 +139,11 @@ main_p <- main_plot_data |>
   geom_point(alpha = 0.8) +
   geom_abline(linetype = "dashed") +
   geom_ribbon(linetype = 2, alpha = 0.1) +
-  facet_wrap(~source + cell_type + int_cov + model) +
+  facet_wrap(~cell_type + int_term + model) +
   labs(
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)"
-  ) + 
+  ) +
   theme_jp()
 
 ggsave(

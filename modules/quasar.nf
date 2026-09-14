@@ -60,10 +60,11 @@ process RUN_QUASAR_PB {
 
     script:
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
-    def apl_flag = (info.model == "nb_glm") ? "--use-apl" : ""
-    def grm_flag = (info.model.contains("lmm")) ? "-g ${grm}" : ""
+    def apl_flag = (info.model in ["nb_glm", "nb_glmm"]) ? "--use-apl" : ""
+    def grm_flag = (info.model in ["lmm", "p_glmm", "nb_glmm"]) ? "-g ${grm}" : ""
     def quant_res_flag = (info.model == "nb_glm") ? "--use-quant-res" : ""
-    def int_flag = (info.int_cov != "none") ? "-i ${info.int_cov}" : ""
+    def interaction_cov = info.interaction_cov ?: info.int_cov
+    def int_flag = (info.int_cov != "none") ? "-i ${interaction_cov}" : ""
     """
     /usr/bin/time -p -o "${info.dataset}-${info.model}-${info.chr}-${info.cell_type}-${info.int_cov}-time.txt" \
       /home/jp2045/quasar/build/quasar \
@@ -72,7 +73,7 @@ process RUN_QUASAR_PB {
       -c "$covs" \
       -o "${info.dataset}-${info.model}-${info.chr}-${info.cell_type}-${info.int_cov}" \
       --model "${info.model}" \
-      --mode                                                                     cis \
+      --mode                                                                        cis \
       ${quant_res_flag} \
       ${apl_flag} \
       ${int_flag} \
@@ -96,7 +97,7 @@ process RUN_QUASAR_SC {
     script:
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
     def interaction_cov = info.interaction_cov ?: info.int_cov
-    def int_flag = (info.int_cov != "none" && info.k == "none") ? "-i ${interaction_cov}" : ""
+    def int_flag = (info.int_cov != "none" && info.k == "none") ? "-i '${interaction_cov}'" : ""
     def cg_flag = (info.k != "none") ? "--cell-groups ${cell_groups}" : ""
     def base = "${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}"
     """
@@ -107,7 +108,7 @@ process RUN_QUASAR_SC {
       --anno "$anno" \
       --cov "$covs" \
       --out "${base}" \
-      --model                                                                                                                                                                             ${info.model} \
+      --model                                                                                                                                                                                                                                                                 ${info.model} \
       --mode cis \
       ${int_flag} \
       ${cg_flag} \

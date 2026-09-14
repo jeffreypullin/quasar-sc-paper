@@ -15,14 +15,27 @@ import matplotlib.pyplot as plt  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "code"))
 from cell_label_subset import cell_label_mask  # noqa: E402
 
-score_cols = ["Cytotoxic", "CD4-Naive", "Th1-Like", "CD8-EM", "Treg"]
-cov_names = {
-    "Cytotoxic": "starcat_Cytotoxic",
-    "CD4-Naive": "starcat_CD4_Naive",
-    "Th1-Like": "starcat_Th1_Like",
-    "CD8-EM": "starcat_CD8_EM",
-    "Treg": "starcat_Treg",
-}
+score_cols = [
+    "Cytotoxic",
+    "Th22",
+    "MAIT",
+    "TEMRA",
+    "CD4-CM",
+    "CD8-EM",
+    "CD4-Naive",
+    "Th2-Activated",
+    "Th2-Resting",
+    "Th1-Like",
+    "CD8-Trm",
+    "Th17-Activated",
+    "Tfh-2",
+    "Tph",
+    "Exhaustion",
+    "Tfh-1",
+    "CellCycle-S",
+    "CellCycle-G2M",
+]
+cov_names = {col: "starcat_" + col.replace("-", "_") for col in score_cols}
 
 cell_label = sys.argv[1]
 adata = sc.read_h5ad(sys.argv[2])

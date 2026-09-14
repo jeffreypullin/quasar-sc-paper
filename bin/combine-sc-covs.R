@@ -17,8 +17,12 @@ pb_covs <- left_join(pb_expr_covs, geno_pcs, by = "sample_id") |>
 
 int_cov_cols <- c(
   "pseudotime",
-  "starcat_Cytotoxic", "starcat_CD4_Naive", "starcat_Th1_Like",
-  "starcat_CD8_EM", "starcat_Treg"
+  "starcat_Cytotoxic", "starcat_Th22", "starcat_MAIT", "starcat_TEMRA",
+  "starcat_CD4_CM", "starcat_CD8_EM", "starcat_CD4_Naive",
+  "starcat_Th2_Activated", "starcat_Th2_Resting", "starcat_Th1_Like",
+  "starcat_CD8_Trm", "starcat_Th17_Activated", "starcat_Tfh_2",
+  "starcat_Tph", "starcat_Exhaustion", "starcat_Tfh_1",
+  "starcat_CellCycle_S", "starcat_CellCycle_G2M"
 )
 
 covs <- sc_expr_covs |>

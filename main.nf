@@ -31,7 +31,8 @@ include { FILTER_VARIANTS ;
           FILTER_VARIANTS as FILTER_VARIANTS_PB ;
           FILTER_VARIANTS as FILTER_VARIANTS_PB_INT ;
           FILTER_VARIANTS as FILTER_VARIANTS_SC_INT ;
-          FILTER_VARIANTS as FILTER_VARIANTS_SC_INT_WITHIN } from './modules/postprocess'
+          FILTER_VARIANTS as FILTER_VARIANTS_SC_INT_WITHIN ;
+          FILTER_VARIANTS as FILTER_VARIANTS_SC_INT_LOGCOUNT } from './modules/postprocess'
 include { COMPUTE_QUASAR_POWER as COMPUTE_QUASAR_POWER_SC } from './modules/quasar'
 include { COMPUTE_QUASAR_POWER as COMPUTE_QUASAR_POWER_PB } from './modules/quasar'
 include { COMPUTE_QUASAR_POWER as COMPUTE_QUASAR_POWER_SC_OFFSET } from './modules/quasar'
@@ -40,10 +41,13 @@ include { RUN_QUASAR_SC as RUN_QUASAR_SC_PERM } from './modules/quasar'
 include { RUN_QUASAR_PB as RUN_QUASAR_PB_PERM_INT } from './modules/quasar'
 include { RUN_QUASAR_SC as RUN_QUASAR_SC_PERM_INT } from './modules/quasar'
 include { RUN_QUASAR_SC as RUN_QUASAR_SC_PERM_WITHIN_INT } from './modules/quasar'
+include { RUN_QUASAR_SC as RUN_QUASAR_SC_PERM_LOGCOUNT_INT } from './modules/quasar'
 include { RUN_QUASAR_PB_GWAS as RUN_QUASAR_PB_GWAS_PERM } from './modules/quasar'
 include { RUN_QUASAR_SC_GWAS as RUN_QUASAR_SC_GWAS_PERM } from './modules/quasar'
 include { PERMUTE_BED ; PERMUTE_COV ; PERMUTE_SC_COV_WITHIN ;
+          PERMUTE_SC_COV_LOGCOUNT_BINS ;
           PERMUTE_BED as PERMUTE_BED_GWAS ;
+          PERMUTE_BED as PERMUTE_BED_PB ;
           PERMUTE_COV as PERMUTE_SC_COV } from './modules/permute'
 include { 
     PLOT_POWER ; PLOT_POWER_COVS ; PLOT_CONVERGENCE ; PLOT_PERM ; 
@@ -54,10 +58,12 @@ include {
     COMPUTE_GENE_PROPERTIES ; PLOT_GENE_PROPERTIES ; PLOT_PERM_INT ;
     PLOT_INT_OUTPUT ; PLOT_GWAS_OUTPUT ; CREATE_EXAMPLE_DATA ;
     PLOT_PERM_GLOBAL ; PLOT_PERM_GWAS ; PLOT_PVALUE_SCATTER ; PLOT_MAIN_VS_INT ;
-    PLOT_INT_TIME ;
-    PLOT_SC_INT_OUTPUT ; PLOT_QUASAR_SC_INT_OUTPUT ; PLOT_PERM_SC_INT ; PLOT_PERM_SC_INT_WITHIN ; 
+    PLOT_INT_TIME ; PLOT_QUASAR_INT_TIME ;
+    PLOT_SC_INT_OUTPUT ; PLOT_QUASAR_SC_INT_OUTPUT ; PLOT_PERM_SC_INT ; PLOT_PERM_SC_INT_WITHIN ;
+    PLOT_PERM_SC_INT_LOGCOUNT_BINS ; 
     // CLUMP_VARIANTS ; 
     PLOT_PERM_SC_GROUPED ; PLOT_GROUPED_SC_OUTPUT ; PLOT_GROUPED_VS_INT ;
+    PLOT_GROUPED_INT_TIME ;
     PLOT_SC_PGLMM_VS_LMM ; 
     PLOT_PERM_SC_INT_GLOBAL ; // PLOT_CLUMPED ; 
     PLOT_SC_INT_FIGURES ; PLOT_UNIQUE_SC_EGENE_FIGURES ;
@@ -87,6 +93,10 @@ workflow {
     // Joint cell × individual fraction grid for CD4_NC power heatmap.
     def joint_fracs = [0.1d, 0.25d, 0.5d, 0.75d, 1.0d]
     def is_joint_both_frac = { info -> info.joint_both_frac == true }
+    def is_starcat_int_cov = { int_cov -> int_cov != null && int_cov.toString().startsWith("starcat_") }
+    def is_int_sc_cov = { int_cov ->
+        int_cov == "none" || int_cov == "pseudotime" || is_starcat_int_cov(int_cov)
+    }
 
     // Per-dataset h5ad sources tagged with the dataset name: tuple(dataset, h5ad).
     ds_meta = channel.fromList(
@@ -106,10 +116,11 @@ workflow {
     cluster_sizes = COMPUTE_CLUSTER_SIZES(ds_meta)
     filt_vcf_files = FILTER_VCF(vcf_files.combine(ids, by: 0))
     bed_files = CONVERT_VCF_TO_BED(filt_vcf_files)
+        .map { dataset, chr, bed, bim, fam -> tuple(dataset, chr, bed) }
     pruned_snps = PRUNE_SNPS(bed_files)
     all_bed = CONCAT_BED_FILES(
         bed_files.map { dataset, chr, bed -> tuple(dataset, bed) }.groupTuple()
-    )
+    ).map { dataset, bed, bim, fam -> tuple(dataset, bed) }
     geno_pcs = COMPUTE_GENOTYPE_PCS(all_bed)
     grm = CREATE_GRM(all_bed)
     anno_bed = CREATE_ANNOT_BED(params.annot_bed_url)
@@ -176,9 +187,6 @@ workflow {
 
     // TEMP: disable joint and other downsampling — keep full data only.
     cell_infos = cell_infos.filter { it.is_full_data }
-
-    // TEMP: skip T_all (too many cells).
-    cell_infos = cell_infos.filter { it.cell_type != "T_all" }
 
     // Pair each info with its dataset's h5ad.
     sc_input = cell_infos
@@ -262,10 +270,10 @@ workflow {
             tuple(info, sc_counts_file, pb_covs_file, geno_pcs_file)
         }
 
-    // Run SAIGE-QTL.
+    // Run SAIGE-QTL. Skip T_all (too many cells for collation).
     saige_subset_bed = SAIGE_SUBSET_BED(all_bed)
     saigeqtl_input = sc_input
-        .filter { it[0].is_full_data }
+        .filter { it[0].is_full_data && it[0].cell_type != "T_all" }
         .map { info, sc_counts_file, pb_covs_file, geno_pcs_file ->
             tuple(info.dataset, info, sc_counts_file, pb_covs_file, geno_pcs_file)
         }
@@ -277,6 +285,8 @@ workflow {
         .map { info, sc_counts_file, pb_covs_file, geno_pcs_file, bed_file, anno ->
             tuple(info, sc_counts_file, pb_covs_file, geno_pcs_file, bed_file, anno)
         }
+        // TEMP: disable SAIGE-QTL.
+        .filter { false }
         | COLLATE_SAIGEQTL_INPUT
 
     gene_lists = EXTRACT_GENES(saigeqtl_input.map({[it[0], it[1]]}), 50)
@@ -297,7 +307,9 @@ workflow {
 
     saigeqtl_output = RUN_SAIGEQTL(saigeqtl_input)
     saigeqtl_output = COMPUTE_SAIGEQTL_POWER(saigeqtl_output)
-    saigeqtl_file = CONCAT_SAIGEQTL_TSVS(saigeqtl_output.map{it[1]}.collect())
+    // TEMP: skip SAIGE-QTL concat while SAIGE-QTL is disabled (empty collect never emits).
+    saigeqtl_file = Channel.empty()
+    // saigeqtl_file = CONCAT_SAIGEQTL_TSVS(saigeqtl_output.map{it[1]}.collect())
 
     // Run pseudobulk quasar.
     pb_covs = COMBINE_PB_COVS(
@@ -328,7 +340,7 @@ workflow {
     pc_gwas = RUN_PC_GWAS(pc_gwas_input)
 
     int_cov = Channel.of("none", "age", "sex")
-    models_for_pb_type = ["counts": ["nb_glm"], "logcounts": ["lm", "lmm"]]
+    models_for_pb_type = ["counts": ["nb_glm", "nb_glmm", "p_glmm"], "logcounts": ["lm", "lmm"]]
     pb_quasar_input = pheno
         .combine(pb_covs, by: 0)
         .map { info, pb_type_val, pheno_bed, covs -> tuple(info.dataset, info, pb_type_val, pheno_bed, covs) }
@@ -354,11 +366,13 @@ workflow {
                 && it[0].count_frac != 1.0d)
         })
         .filter({ !(it[0].cell_type in ["B_all", "T_all"]) })
-        .filter({it[0].int_cov == "none"})
-        .filter({it[0].model in ["nb_glm", "lm"]})
-
-    // TEMP: disable all pseudobulk quasar runs (main, GWAS, perms, int-perms).
-    pb_quasar_input = pb_quasar_input.filter { false }
+        // TEMP: all PB models, B_IN / Plasma Gxsex only (nb_glmm: Plasma only).
+        .filter({
+            it[0].cell_type in ["B_IN", "Plasma"] &&
+            it[0].int_cov == "sex" &&
+            it[0].is_full_data &&
+            !(it[0].model == "nb_glmm" && it[0].cell_type == "B_IN")
+        })
 
     pb_quasar = RUN_QUASAR_PB(pb_quasar_input)
     pb_quasar = Utils.attachGeneProperties(pb_quasar, gene_properties)
@@ -368,7 +382,7 @@ workflow {
 
     // Run single-cell quasar.
     starcat_int_cov_by_cell_type = [
-        "T_all": "starcat_CD4_Naive",
+        "T_all": "starcat_all",
     ]
     starcat_cell_types = starcat_int_cov_by_cell_type.keySet() as List
     starcat_int_covs = starcat_int_cov_by_cell_type.values() as List
@@ -395,17 +409,27 @@ workflow {
             .map { dataset, info, pb_c, sc_c, pcs -> tuple(info, pb_c, sc_c, pcs) }
     )
 
-    base_cov_specs = Channel.of("bulk_pca", "sc_pca", "bulk_pca+pct_mito", "bulk_pca+cell_cycle")
-    int_cov_specs = Channel.of(
-        ["B_all", "bulk_pca+pseudotime"],
-        ["T_all", "bulk_pca+starcat_CD4_Naive"],
-        ["T_all", "bulk_pca+starcat_Cytotoxic"]
-    )
-    int_cov_for_cov_spec = [
-        "bulk_pca+pseudotime":        "pseudotime",
-        "bulk_pca+starcat_CD4_Naive": "starcat_CD4_Naive",
-        "bulk_pca+starcat_Cytotoxic": "starcat_Cytotoxic",
+    starcat_cov_names = [
+        "starcat_Cytotoxic",
+        "starcat_TEMRA",
+        "starcat_CD4_CM",
+        "starcat_CD8_EM",
+        "starcat_CD4_Naive",
     ]
+    base_cov_specs = Channel.of("bulk_pca", "sc_pca", "bulk_pca+pct_mito", "bulk_pca+cell_cycle")
+    int_cov_specs = Channel.fromList([
+        ["B_all", "bulk_pca+pseudotime"],
+        ["T_all", "bulk_pca+starcat_all"],
+        ["T_all", "bulk_pca+starcat_CD4_Naive"],
+    ])
+    int_cov_for_cov_spec = [
+        "bulk_pca+pseudotime": "pseudotime",
+        "bulk_pca+starcat_all": "starcat_all",
+        "bulk_pca+starcat_CD4_Naive": "starcat_CD4_Naive",
+    ]
+    def interaction_cov_for_int_cov = { int_cov ->
+        int_cov == "starcat_all" ? starcat_cov_names.join(",") : int_cov
+    }
     base_cov_pairs = sc_covs_combined.combine(base_cov_specs)
     int_cov_pairs = sc_covs_combined
         .map { info, cov -> tuple(info.cell_type, info, cov) }
@@ -413,43 +437,55 @@ workflow {
         .map { cell_type, info, cov, cov_spec -> tuple(info, cov, cov_spec) }
     sc_covs = FILTER_COVS(base_cov_pairs.mix(int_cov_pairs))
 
-    // Run CASTIE on B_all counts and SCT counts, with pseudotime as the GxC context.
-    castie_input = sc_counts.mix(sc_sct_counts)
-        .filter { it[1].is_full_data && it[1].cell_type == "B_all" }
+    // TEMP: CASTIE on T_all counts with starcat_CD4_Naive only.
+    castie_pheno = sc_counts
+        .filter { it[1].is_full_data && it[1].cell_type == "T_all" }
         .map { data_type, info, pheno_file -> tuple(info, data_type, pheno_file) }
-        .combine(
-            sc_covs.filter { it[0].is_full_data && it[0].cell_type == "B_all" && it[1] == "bulk_pca+pseudotime" },
-            by: 0
-        )
+    castie_covs = sc_covs.filter { info, cov_spec, _covs ->
+        info.is_full_data &&
+            info.cell_type == "T_all" &&
+            cov_spec == "bulk_pca+starcat_CD4_Naive"
+    }
+    castie_input = castie_pheno
+        .combine(castie_covs, by: 0)
         .map { info, data_type, pheno_file, cov_spec, covs ->
-            tuple(info.dataset, info, data_type, pheno_file, covs)
+            tuple(info.dataset, info, data_type, pheno_file, covs, cov_spec)
         }
         .combine(bed_files, by: 0)
-        .map { dataset, info, data_type, pheno_file, covs, chr, bed_file ->
-            tuple(info + [chr: chr, data_type: data_type], pheno_file, covs, bed_file)
+        .map { dataset, info, data_type, pheno_file, covs, cov_spec, chr, bed_file ->
+            tuple(
+                info + [
+                    chr: chr,
+                    data_type: data_type,
+                    cov_spec: cov_spec,
+                    int_cov: int_cov_for_cov_spec.getOrDefault(cov_spec, "none"),
+                ],
+                pheno_file, covs, bed_file
+            )
         }
         .combine(anno_bed)
         .map { info, pheno_file, covs, bed_file, anno ->
             tuple(info, pheno_file, covs, bed_file, anno)
         }
-        | COLLATE_CASTIE_INPUT
+        // TEMP: CASTIE run disabled.
+        // | COLLATE_CASTIE_INPUT
 
-    castie_gene_lists = EXTRACT_CASTIE_GENES(castie_input.map({[it[0], it[1]]}), 50)
-        .flatMap { info, gene_lists ->
-            def lists = (gene_lists instanceof List) ? gene_lists : [gene_lists]
-            lists.collect { glist -> tuple(info, glist) }
-        }
+    // castie_gene_lists = EXTRACT_CASTIE_GENES(castie_input.map({[it[0], it[1]]}), 10)
+    //     .flatMap { info, gene_lists ->
+    //         def lists = (gene_lists instanceof List) ? gene_lists : [gene_lists]
+    //         lists.collect { glist -> tuple(info, glist) }
+    //     }
 
-    castie_run_input = castie_input
-        .combine(castie_gene_lists, by: 0)
-        .map { it -> [it[0].dataset] + it }
-        .combine(saige_subset_bed, by: 0)
-        .map { dataset, info, input, bed, annot, gene_file, subset_bed ->
-            tuple(info, input, bed, annot, gene_file, subset_bed)
-        }
+    // castie_run_input = castie_input
+    //     .combine(castie_gene_lists, by: 0)
+    //     .map { it -> [it[0].dataset] + it }
+    //     .combine(saige_subset_bed, by: 0)
+    //     .map { dataset, info, input, bed, annot, gene_file, subset_bed ->
+    //         tuple(info, input, bed, annot, gene_file, subset_bed)
+    //     }
 
-    castie_output = RUN_CASTIE(castie_run_input)
-    castie_file = CONCAT_CASTIE_TSVS(castie_output.map{it[1]}.collect())
+    // castie_output = RUN_CASTIE(castie_run_input)
+    // castie_file = CONCAT_CASTIE_TSVS(castie_output.map{it[1]}.collect())
 
     pc_sc_gwas_input = COMPUTE_SC_PC_SC_PHENO(
         sc_preprocess_input
@@ -486,14 +522,19 @@ workflow {
         .combine(bed_files, by: 0)
         .flatMap { dataset, info, data_type, sc_pheno_file, cov_spec, covs, anno, chr, bed_file ->
             models_for_data_type[data_type].collect { model_val ->
-                def dict = info + [
-                    chr: chr,
-                    cov_spec: cov_spec,
-                    int_cov: int_cov_for_cov_spec.getOrDefault(cov_spec, "none"),
-                    data_type: data_type,
-                    model: model_val,
-                ]
-                tuple(dict, sc_pheno_file, covs, anno, bed_file)
+                tuple(
+                    info + [
+                        chr: chr,
+                        cov_spec: cov_spec,
+                        data_type: data_type,
+                        model: model_val,
+                        int_cov: int_cov_for_cov_spec.getOrDefault(cov_spec, "none"),
+                        interaction_cov: interaction_cov_for_int_cov(
+                            int_cov_for_cov_spec.getOrDefault(cov_spec, "none")
+                        ),
+                    ],
+                    sc_pheno_file, covs, anno, bed_file
+                )
             }
         }
         .filter { !(it[0].cov_spec in ["sc_pca", "bulk_pca+pct_mito", "bulk_pca+cell_cycle"])
@@ -552,13 +593,16 @@ workflow {
             tuple(info, sc_pheno, covs, anno, plink, cg)
         }
 
+    def allow_grouped_int_cov = { int_cov ->
+        int_cov != "none" && (!is_starcat_int_cov(int_cov) || int_cov == "starcat_CD4_Naive")
+    }
     sc_binned_groups = COMPUTE_CELL_GROUPS(
         sc_input_by_mode.binned
-            .filter { it[0].int_cov != "none" }
+            .filter { allow_grouped_int_cov(it[0].int_cov) }
             .map { info, sc_pheno, covs, anno, plink -> tuple(info, covs) }
     )
     sc_binned_full = sc_input_by_mode.binned
-        .filter { it[0].int_cov != "none" }
+        .filter { allow_grouped_int_cov(it[0].int_cov) }
         .combine(sc_binned_groups, by: 0)
         .map { info, sc_pheno, covs, anno, plink, cg ->
             tuple(info, sc_pheno, covs, anno, plink, cg)
@@ -567,21 +611,22 @@ workflow {
     sc_quasar_input_full = sc_none_full
         .mix(sc_seacells_full)
         .mix(sc_binned_full)
-        .filter({it[0].int_cov in ["none", "pseudotime", "starcat_CD4_Naive", "starcat_Cytotoxic"]})
+        .filter({ is_int_sc_cov(it[0].int_cov) })
         .filter({it[0].k in ["none", 5]})
+        .filter({ !is_starcat_int_cov(it[0].int_cov) || it[0].k == "none" || it[0].int_cov == "starcat_CD4_Naive" })
         .filter { it[0].model != "lmm_sc"
                || (it[0].dataset == "onek1k"
                    && it[0].k == "none") }
-        .filter( {it[0].cell_type in ["B_all", "T_all"]} )
+        .filter { it[0].cell_type in ["B_all", "T_all"] }
         .filter { it[0].data_type != "sct_counts"
                || (it[0].cell_type == "B_all"
-                   && it[0].int_cov == "pseudotime"
+                   && it[0].int_cov in ["none", "pseudotime"]
                    && it[0].k == "none") }
         .filter { it[0].is_full_data
                || (it[0].model == "p_glmm_sc"
                    && it[0].k == 5
                    && it[0].int_cov != "none"
-                   && it[0].cell_type in ["B_all", "T_all"])
+                   && it[0].cell_type in ["B_all"])
                || (it[0].model in ["p_glmm_sc", "lmm_sc"]
                    && it[0].k == "none"
                    && it[0].int_cov == "none"
@@ -609,6 +654,19 @@ workflow {
                    && it[0].indiv_frac == 1.0d
                    && it[0].n_cells_target < 0
                    && it[0].count_frac != 1.0d) }
+        // TEMP: B_all pseudotime + T_all starcat interaction runs only.
+        .filter {
+            (it[0].model == "p_glmm_sc"
+                && it[0].cell_type == "B_all"
+                && it[0].data_type == "sct_counts"
+                && it[0].k == "none"
+                && it[0].int_cov == "pseudotime")
+            || (it[0].model == "p_glmm_sc"
+                && it[0].cell_type == "T_all"
+                && it[0].data_type == "counts"
+                && it[0].k == "none"
+                && it[0].int_cov in ["starcat_all", "starcat_CD4_Naive"])
+        }
 
     sc_quasar = RUN_QUASAR_SC(sc_quasar_input_full)
     sc_quasar = Utils.attachGeneProperties(sc_quasar, gene_properties)
@@ -663,7 +721,10 @@ workflow {
         }
 
     int_csaqtl_groups_input = sc_covs
-        .filter { info, cov_spec, cov -> int_cov_for_cov_spec.containsKey(cov_spec) }
+        .filter { info, cov_spec, cov ->
+            int_cov_for_cov_spec.containsKey(cov_spec) &&
+                !is_starcat_int_cov(int_cov_for_cov_spec[cov_spec])
+        }
         .map { info, cov_spec, cov ->
             tuple(info + [int_cov: int_cov_for_cov_spec[cov_spec], k: 5], cov)
         }
@@ -778,17 +839,18 @@ workflow {
     //     .collectFile(name: 'clumped_sc_quasar_file', newLine: true, sort: false)
 
     // GWAS analysis.
-    sc_quasar_gwas_input = sc_quasar_input
-        .filter({it[0].model == "lmm_sc"})
-        .filter({it[0].cov_spec == "bulk_pca" && it[0].is_full_data})
-        .filter({it[0].cell_type == "B_IN"})
-        .combine(Channel.from(1..22))
-        .map { info, sc_pheno, covs, anno, bed, pheno_chr ->
-          tuple(info + [pheno_chr: pheno_chr as int], sc_pheno, covs, anno, bed)
-        }
-        .filter({it[0].pheno_chr== 1.0d})
-
-    sc_quasar_gwas = RUN_QUASAR_SC_GWAS(sc_quasar_gwas_input)
+    // Disabled for now.
+    // sc_quasar_gwas_input = sc_quasar_input
+    //     .filter({it[0].model == "lmm_sc"})
+    //     .filter({it[0].cov_spec == "bulk_pca" && it[0].is_full_data})
+    //     .filter({it[0].cell_type == "B_IN"})
+    //     .combine(Channel.from(1..22))
+    //     .map { info, sc_pheno, covs, anno, bed, pheno_chr ->
+    //       tuple(info + [pheno_chr: pheno_chr as int], sc_pheno, covs, anno, bed)
+    //     }
+    //     .filter({it[0].pheno_chr== 1.0d})
+    // sc_quasar_gwas = RUN_QUASAR_SC_GWAS(sc_quasar_gwas_input)
+    sc_quasar_gwas = Channel.empty()
 
     pb_quasar_gwas_input = pb_quasar_input
         .filter({it[0].is_full_data && it[0].int_cov == "none" && it[0].model == "nb_glm"})
@@ -847,17 +909,16 @@ workflow {
         .collectFile(name: 'pc_sc_gwas_file', newLine: true, sort: false)
 
     // Genotype permutation analysis.
-    // TEMP: 1 permutation (was 1..10).
     rep_bed_files = bed_files
-      .combine(channel.of(1))
+      .combine(channel.of(1..10))
     permute_bed_files = PERMUTE_BED(rep_bed_files)
 
     perm_sc_quasar_input = sc_quasar_input_full
       .filter( {it[0].data_type != "sct_counts"} )
-      .filter( {it[0].cov_spec in ["bulk_pca", "bulk_pca+pseudotime", "bulk_pca+starcat_CD4_Naive", "bulk_pca+starcat_Cytotoxic"] })
-      .filter( {it[0].int_cov in ["none", "pseudotime", "starcat_CD4_Naive", "starcat_Cytotoxic"]})
+      .filter { it[0].cov_spec == "bulk_pca" || int_cov_for_cov_spec.containsKey(it[0].cov_spec) }
+      .filter( { is_int_sc_cov(it[0].int_cov) } )
       .filter( {it[0].k in ["none", 5]})
-      .filter( {it[0].cell_type in ["B_all", "T_all"]} )
+      .filter { it[0].cell_type == "T_all" && it[0].int_cov in ["starcat_all", "starcat_CD4_Naive"] }
       // No permutations on the CD4_NC joint cell × individual grid (keep full data only).
       .filter( { !is_joint_both_frac(it[0]) || it[0].is_full_data } )
       .map { info, sc_pheno, covs, anno, bed, cg ->
@@ -872,16 +933,19 @@ workflow {
     perm_sc_quasar_filt = FILTER_VARIANTS_SC(Utils.combineWithPrunedSnps(perm_sc_quasar, pruned_snps))
     perm_sc_quasar_filt = Utils.attachGeneProperties(perm_sc_quasar_filt, gene_properties)
 
+    rep_bed_files_pb = bed_files
+      .combine(channel.of(1..5))
+    permute_bed_files_pb = PERMUTE_BED_PB(rep_bed_files_pb)
+
     perm_pb_quasar_input = pb_quasar_input
-      .filter( {it[0].cell_type in ["Plasma", "B_IN", "CD4_NC", "B_all"]})
-      .filter( {it[0].int_cov in ["none", "pseudotime"]})
-      .filter( {it[0].model in ["nb_glm", "lmm", "lm"]})
+      .filter( {it[0].cell_type in ["Plasma", "B_IN"]})
+      .filter( {it[0].is_full_data} )
       // No permutations on the CD4_NC joint cell × individual grid (keep full data only).
       .filter( { !is_joint_both_frac(it[0]) || it[0].is_full_data } )
       .map { info, pheno, covs, bed, grm ->
         tuple([info.dataset, info.chr], info, pheno, covs, bed, grm)
        }
-      .combine(permute_bed_files.map { ds, chr, pb -> tuple([ds, chr], pb) }, by: 0)
+      .combine(permute_bed_files_pb.map { ds, chr, pb -> tuple([ds, chr], pb) }, by: 0)
       .map { key, info, pheno, covs, bed, grm, perm_bed ->
         tuple(info, pheno, covs, perm_bed, grm)
       }
@@ -913,23 +977,24 @@ workflow {
 
     pb_quasar_gwas_perm = RUN_QUASAR_PB_GWAS_PERM(pb_quasar_gwas_perm_input)
 
-    sc_quasar_gwas_perm_input = sc_quasar_input
-        .filter({it[0].model == "lmm_sc"})
-        .filter({it[0].cov_spec == "bulk_pca"})
-        .filter({it[0].is_full_data})
-        .filter({it[0].cell_type == "B_IN"})
-        .combine(Channel.from(1..22))
-        .map { info, sc_pheno, covs, anno, bed, pheno_chr ->
-         tuple(info + [pheno_chr: pheno_chr as int], sc_pheno, covs, anno, bed)
-        }
-        .map { info, sc_pheno, covs, anno, bed ->
-          tuple([info.dataset, info.chr], info, sc_pheno, covs, anno, bed)
-        }
-        .combine(gwas_permute_bed_files.map { ds, chr, pb -> tuple([ds, chr], pb) }, by: 0)
-        .map({ it -> [it[1], it[2], it[3], it[4], it[6]]})
-        .filter({it[0].pheno_chr== 1.0d})
-
-    sc_quasar_gwas_perm = RUN_QUASAR_SC_GWAS_PERM(sc_quasar_gwas_perm_input)
+    // Disabled for now.
+    // sc_quasar_gwas_perm_input = sc_quasar_input
+    //     .filter({it[0].model == "lmm_sc"})
+    //     .filter({it[0].cov_spec == "bulk_pca"})
+    //     .filter({it[0].is_full_data})
+    //     .filter({it[0].cell_type == "B_IN"})
+    //     .combine(Channel.from(1..22))
+    //     .map { info, sc_pheno, covs, anno, bed, pheno_chr ->
+    //      tuple(info + [pheno_chr: pheno_chr as int], sc_pheno, covs, anno, bed)
+    //     }
+    //     .map { info, sc_pheno, covs, anno, bed ->
+    //       tuple([info.dataset, info.chr], info, sc_pheno, covs, anno, bed)
+    //     }
+    //     .combine(gwas_permute_bed_files.map { ds, chr, pb -> tuple([ds, chr], pb) }, by: 0)
+    //     .map({ it -> [it[1], it[2], it[3], it[4], it[6]]})
+    //     .filter({it[0].pheno_chr== 1.0d})
+    // sc_quasar_gwas_perm = RUN_QUASAR_SC_GWAS_PERM(sc_quasar_gwas_perm_input)
+    sc_quasar_gwas_perm = Channel.empty()
 
     sc_quasar_gwas_perm_file = Channel
         .of("dataset\tcell_type\tgeno_chr\tpheno_chr\tsig_variant_file\ttime_file\tn_variants")
@@ -950,11 +1015,10 @@ workflow {
         .collectFile(name: 'pb_quasar_gwas_perm_file', newLine: true, sort: false)
 
     // Permutations under an interaction null.
-    // TEMP: 1 permutation (was 1..10).
     rep_pb_cov_files = pb_covs
       .filter({it[0].is_full_data})
       .combine(int_cov.filter({it != "none"}))
-      .combine(channel.of(1))
+      .combine(channel.of(1..5))
       .map { info, covs, int_cov, ind ->
         tuple(info.dataset, int_cov, info.cell_type, covs, ind)
       }
@@ -963,14 +1027,14 @@ workflow {
 
     perm_int_pb_quasar_input = pb_quasar_input
        .filter( {it[0].is_full_data} )
-       .filter( {it[0].cell_type in ["Plasma"]} )
-       .filter( {it[0].model in ["nb_glm", "lmm", "lm"]} )
+       .filter( {it[0].cell_type in ["Plasma", "B_IN"]} )
+       .filter( {it[0].model in ["nb_glm", "nb_glmm", "lmm", "lm", "p_glmm"]} )
        .map { info, pheno, covs, bed, grm ->
         tuple(info.dataset, info.int_cov, info.cell_type, info, pheno, covs, bed, grm)
        }
        .combine(permute_pb_covs, by: [0, 1, 2])
        .map { dataset, int_cov, cell_type, info, pheno, covs, bed, grm, perm_cov ->
-        tuple(info, pheno, perm_cov, bed, grm)
+        tuple(info + [interaction_cov: "${info.int_cov}_perm"], pheno, perm_cov, bed, grm)
        }
 
     perm_int_pb_quasar = RUN_QUASAR_PB_PERM_INT(perm_int_pb_quasar_input)
@@ -986,11 +1050,12 @@ workflow {
         )
         .collectFile(name: 'pb_quasar_perm_int_file', newLine: true, sort: false)
 
-    // TEMP: 1 permutation (was 1..10).
     rep_sc_cov_files = sc_covs
-      .filter { info, cov_spec, cov -> int_cov_for_cov_spec.containsKey(cov_spec) }
+      .filter { info, cov_spec, cov ->
+          int_cov_for_cov_spec.containsKey(cov_spec) && !is_starcat_int_cov(int_cov_for_cov_spec[cov_spec])
+      }
       .map { info, cov_spec, cov -> tuple(info.dataset, int_cov_for_cov_spec[cov_spec], info.cell_type, cov) }
-      .combine(channel.of(1))
+      .combine(channel.of(1..10))
       .map { dataset, int_cov, cell_type, covs, ind -> tuple(dataset, int_cov, cell_type, covs, ind) }
 
     permute_sc_covs = PERMUTE_SC_COV(rep_sc_cov_files)
@@ -999,7 +1064,7 @@ workflow {
       .filter { it[0].data_type != "sct_counts" }
       .filter { it[0].model == "p_glmm_sc" }
       .filter { it[0].k == "none" }
-      .filter { it[0].int_cov != "none" }
+      .filter { it[0].int_cov != "none" && !is_starcat_int_cov(it[0].int_cov) }
       .map { info, sc_pheno, covs, anno, bed, cg ->
         tuple(info.dataset, info.int_cov, info.cell_type, info, sc_pheno, covs, anno, bed, cg)
       }
@@ -1021,11 +1086,12 @@ workflow {
         )
         .collectFile(name: 'sc_quasar_perm_int_file', newLine: true, sort: false)
 
-    // TEMP: 1 permutation (was 1..10).
     rep_sc_cov_files_within = sc_covs
-      .filter { info, cov_spec, cov -> int_cov_for_cov_spec.containsKey(cov_spec) }
+      .filter { info, cov_spec, cov ->
+          int_cov_for_cov_spec.containsKey(cov_spec) && !is_starcat_int_cov(int_cov_for_cov_spec[cov_spec])
+      }
       .map { info, cov_spec, cov -> tuple(info.dataset, int_cov_for_cov_spec[cov_spec], info.cell_type, cov) }
-      .combine(channel.of(1))
+      .combine(channel.of(1..10))
       .map { dataset, int_cov, cell_type, covs, ind -> tuple(dataset, int_cov, cell_type, covs, ind) }
 
     permute_sc_covs_within = PERMUTE_SC_COV_WITHIN(rep_sc_cov_files_within)
@@ -1034,7 +1100,7 @@ workflow {
       .filter({ it[0].data_type != "sct_counts"} )
       .filter({ it[0].model == "p_glmm_sc"} )
       .filter({ it[0].k == "none"} )
-      .filter({ it[0].int_cov != "none"})
+      .filter({ it[0].int_cov != "none" && !is_starcat_int_cov(it[0].int_cov)})
       .map { info, sc_pheno, covs, anno, bed, cg ->
         tuple(info.dataset, info.int_cov, info.cell_type, info, sc_pheno, covs, anno, bed, cg)
       }
@@ -1055,6 +1121,65 @@ workflow {
             }
         )
         .collectFile(name: 'sc_quasar_perm_int_within_file', newLine: true, sort: false)
+
+    // Shuffle the interaction covariate within log-library-size bins so that
+    // depth-associated pseudotime structure is preserved.
+    rep_sc_cov_files_logcount = sc_covs
+      .filter { info, cov_spec, cov ->
+          int_cov_for_cov_spec.containsKey(cov_spec) && !is_starcat_int_cov(int_cov_for_cov_spec[cov_spec])
+      }
+      .map { info, cov_spec, cov ->
+        tuple(
+          [info.dataset, info.cell_type, info.cell_frac, info.indiv_frac, info.n_cells_target, info.count_frac],
+          info.dataset,
+          int_cov_for_cov_spec[cov_spec],
+          info.cell_type,
+          cov
+        )
+      }
+      .combine(
+        sc_counts.map { type, info, counts ->
+          tuple(
+            [info.dataset, info.cell_type, info.cell_frac, info.indiv_frac, info.n_cells_target, info.count_frac],
+            counts
+          )
+        },
+        by: 0
+      )
+      .combine(channel.of(1..10))
+      .map { key, dataset, int_cov, cell_type, cov, counts, ind ->
+        tuple(dataset, int_cov, cell_type, cov, counts, ind)
+      }
+
+    permute_sc_covs_logcount = PERMUTE_SC_COV_LOGCOUNT_BINS(rep_sc_cov_files_logcount)
+
+    perm_int_sc_quasar_logcount_input = sc_quasar_input_full
+      .filter({ it[0].data_type in ["counts", "sct_counts"]} )
+      .filter({ it[0].model == "p_glmm_sc"} )
+      .filter({ it[0].k == "none"} )
+      .filter({ it[0].int_cov != "none" && !is_starcat_int_cov(it[0].int_cov)})
+      // TEMP: skip interaction perms while only running the unpermuted quasar interaction.
+      .filter { false }
+      .map { info, sc_pheno, covs, anno, bed, cg ->
+        tuple(info.dataset, info.int_cov, info.cell_type, info, sc_pheno, covs, anno, bed, cg)
+      }
+      .combine(permute_sc_covs_logcount, by: [0, 1, 2])
+      .map { dataset, int_cov, cell_type, info, sc_pheno, covs, anno, bed, cg, perm_cov ->
+        tuple(info + [interaction_cov: "${info.int_cov}_perm"], sc_pheno, perm_cov, anno, bed, cg)
+      }
+
+    perm_int_sc_quasar_logcount = RUN_QUASAR_SC_PERM_LOGCOUNT_INT(perm_int_sc_quasar_logcount_input)
+    perm_int_sc_quasar_logcount_filt = FILTER_VARIANTS_SC_INT_LOGCOUNT(Utils.combineWithPrunedSnps(perm_int_sc_quasar_logcount, pruned_snps))
+    perm_int_sc_quasar_logcount_filt = Utils.attachGeneProperties(perm_int_sc_quasar_logcount_filt, gene_properties)
+
+    sc_quasar_perm_int_logcount_file = Channel
+        .of("dataset\tmodel\tdata_type\tcell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tprop_file")
+        .concat(perm_int_sc_quasar_logcount_filt
+            .map { info, region_file, variant_file, time_file, prop_file ->
+                "${info.dataset}\t${info.model}\t${info.data_type}\t${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${prop_file}"
+            }
+        )
+        .collectFile(name: 'sc_quasar_perm_int_logcount_file', newLine: true, sort: false)
 
     perm_sc_quasar_file = Channel
         .of("dataset\tmodel\tcell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tcount_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tprop_file")
@@ -1129,23 +1254,25 @@ workflow {
     //PLOT_PERM_CELL_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
     //PLOT_PERM_COUNT_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
     //PLOT_PERM_PB(perm_pb_quasar_file)
-    //PLOT_PERM_GLOBAL(perm_pb_quasar_file)
+    PLOT_PERM_GLOBAL(perm_pb_quasar_file)
     //PLOT_PERM_GWAS(sc_quasar_gwas_perm_file, pb_quasar_gwas_perm_file)
-    //PLOT_PERM_INT(perm_int_pb_quasar_file)
-    //PLOT_INT_OUTPUT(pb_quasar_file)
-    PLOT_SC_INT_OUTPUT(sc_quasar_file, castie_file)
-    //PLOT_QUASAR_SC_INT_OUTPUT(sc_quasar_file)
+    PLOT_PERM_INT(perm_int_pb_quasar_file)
+    PLOT_INT_OUTPUT(pb_quasar_file)
+    //PLOT_SC_INT_OUTPUT(sc_quasar_file, castie_file)
+    PLOT_QUASAR_SC_INT_OUTPUT(sc_quasar_file)
     //PLOT_GROUPED_SC_OUTPUT(sc_quasar_file)
+    //PLOT_GROUPED_INT_TIME(sc_quasar_file)
     //PLOT_GROUPED_VS_INT(sc_quasar_file, castie_file)
     //PLOT_SC_PGLMM_VS_LMM(sc_quasar_file)
     //PLOT_PERM_SC_GROUPED(perm_sc_quasar_file)
-    //PLOT_PERM_SC_INT_GLOBAL(perm_sc_quasar_file)
+    PLOT_PERM_SC_INT_GLOBAL(perm_sc_quasar_file)
     //PLOT_PERM_SC_INT(sc_quasar_perm_int_file)
     //PLOT_SC_INT_FIGURES(sc_int_figures_input)
     //PLOT_METACELL_OUTPUT(sc_quasar_file, seacells_file)
     //PLOT_CSAQTL_OUTPUT(csaqtl_quasar_file)
     //PLOT_PC_GWAS_OUTPUT(pc_gwas_file, pc_sc_gwas_file)so
     //PLOT_PERM_SC_INT_WITHIN(sc_quasar_perm_int_within_file)
+    //PLOT_PERM_SC_INT_LOGCOUNT_BINS(sc_quasar_perm_int_logcount_file)
     //PLOT_TIME(pb_quasar_file, sc_quasar_file, saigeqtl_file)
     //PLOT_CELLS_PER_INDIV(
     //    cluster_sizes.map { dataset, sizes, cells_per_indiv -> cells_per_indiv }
@@ -1158,6 +1285,7 @@ workflow {
     //PLOT_ZSCORE_SCATTER(pb_quasar_file, sc_quasar_file, saigeqtl_file)
     //PLOT_MAIN_VS_INT(sc_quasar_file)
     //PLOT_INT_TIME(sc_quasar_file, castie_file)
+    PLOT_QUASAR_INT_TIME(sc_quasar_file)
     //RUN_COLOC(sc_quasar_file)
 
     // Create example data for quasar.

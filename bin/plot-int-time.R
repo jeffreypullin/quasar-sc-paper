@@ -40,6 +40,20 @@ if ("sc_type" %in% names(sc_data_files)) {
   sc_data_files <- filter(sc_data_files, sc_type == "counts")
 }
 
+int_cov_lookup <- c(
+  "pseudotime" = "Interaction (pseudotime)",
+  "starcat_all" = "Interaction (STARCAT all)",
+  "starcat_CD4_Naive" = "Interaction (STARCAT CD4 Naive)"
+)
+
+analysis_levels <- c(
+  "Main effect",
+  "Interaction (pseudotime)",
+  "Interaction (STARCAT CD4 Naive)",
+  "Interaction (STARCAT all)",
+  "Grouped"
+)
+
 time_data <- sc_data_files |>
   rowwise() |>
   mutate(time = read_time(time_file)) |>
@@ -48,7 +62,10 @@ time_data <- sc_data_files |>
     analysis = case_when(
       as.character(k) != "none" ~ "Grouped",
       int_cov == "none" ~ "Main effect",
-      TRUE ~ "Interaction"
+      TRUE ~ coalesce(
+        unname(int_cov_lookup[as.character(int_cov)]),
+        paste0("Interaction (", int_cov, ")")
+      )
     )
   ) |>
   summarise(
@@ -61,17 +78,23 @@ if (length(args) >= 2) {
   if (!"data_type" %in% names(castie_time_data)) {
     castie_time_data$data_type <- "counts"
   }
+  if (!"int_cov" %in% names(castie_time_data)) {
+    castie_time_data$int_cov <- "pseudotime"
+  }
   castie_time_data <- castie_time_data |>
     mutate(
       data_type = ifelse(is.na(data_type) | data_type == "", "counts", data_type),
+      int_cov = ifelse(is.na(int_cov) | int_cov == "", "pseudotime", int_cov),
       time = coalesce(as.numeric(step1_time), 0) +
         coalesce(as.numeric(step2_time), 0) +
         coalesce(as.numeric(step3_time), 0)
     ) |>
-    summarise(time = sum(time), .by = c(cell_type, data_type)) |>
+    summarise(time = sum(time), .by = c(cell_type, data_type, int_cov)) |>
     mutate(
-      int_cov = "pseudotime",
-      analysis = "Interaction",
+      analysis = coalesce(
+        unname(int_cov_lookup[as.character(int_cov)]),
+        paste0("Interaction (", int_cov, ")")
+      ),
       model = "castie"
     )
   time_data <- bind_rows(time_data, castie_time_data)
@@ -79,7 +102,13 @@ if (length(args) >= 2) {
 
 time_data <- time_data |>
   mutate(
-    analysis = factor(analysis, levels = c("Main effect", "Interaction", "Grouped")),
+    analysis = factor(
+      analysis,
+      levels = intersect(
+        c(analysis_levels, setdiff(unique(analysis), analysis_levels)),
+        unique(analysis)
+      )
+    ),
     cell_type = fct_reorder(factor(cell_type), time, .fun = max),
     model = factor(
       method_lookup[model],

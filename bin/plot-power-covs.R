@@ -65,7 +65,7 @@ filter_int_cov_data <- function(df) {
     filter(cell_frac == 1) |>
     filter(
       (cell_type == "B_all" & cov_spec %in% c("bulk_pca", "bulk_pca+pseudotime")) |
-        (cell_type == "T_all" & cov_spec %in% c("bulk_pca", "bulk_pca+starcat_CD4_Naive", "bulk_pca+starcat_Cytotoxic"))
+        (cell_type == "T_all" & (cov_spec == "bulk_pca" | startsWith(cov_spec, "bulk_pca+starcat_")))
     )
 }
 

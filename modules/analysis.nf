@@ -249,7 +249,7 @@ process PLOT_INT_OUTPUT {
     label "high_mem"
 
     input: val perm_pb_quasar_file
-    output: path("int-res-plot.pdf")
+    output: path("int-res-egenes.tsv")
 
     script:
     """
@@ -296,6 +296,20 @@ process PLOT_PERM_SC_INT_WITHIN {
     """
 }
 
+process PLOT_PERM_SC_INT_LOGCOUNT_BINS {
+    publishDir "output"
+    label "high_mem"
+
+    input: val perm_sc_quasar_file
+    output: tuple path("perm-sc-int-logcount-bins-plot.pdf"),
+                 path("perm-sc-int-logcount-bins-main-plot.pdf")
+
+    script:
+    """
+    plot-perm-sc-int-logcount-bins.R $perm_sc_quasar_file
+    """
+}
+
 process PLOT_PERM_SC_GROUPED {
     publishDir "output"
     label "high_mem"
@@ -339,6 +353,18 @@ process PLOT_GROUPED_VS_INT {
     script:
     """
     plot-grouped-vs-int.R $sc_quasar_file $castie_file
+    """
+}
+
+process PLOT_GROUPED_INT_TIME {
+    publishDir "output"
+
+    input: val sc_quasar_file
+    output: path("grouped-int-time-plot.pdf")
+
+    script:
+    """
+    plot-grouped-int-time.R $sc_quasar_file
     """
 }
 
@@ -550,6 +576,19 @@ process PLOT_INT_TIME {
     script:
     """
     plot-int-time.R $sc_quasar_file $castie_file
+    """
+}
+
+process PLOT_QUASAR_INT_TIME {
+    publishDir "output"
+    label "high_mem"
+
+    input: val sc_quasar_file
+    output: path("time-int-plot.pdf")
+
+    script:
+    """
+    plot-int-time.R $sc_quasar_file
     """
 }
 

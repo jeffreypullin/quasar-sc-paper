@@ -18,19 +18,38 @@ neg_log10_p <- function(p) {
 
 effect_levels <- c("Main only", "Main in interaction", "Interaction")
 
+int_acat_cols <- function(region_names) {
+  cols <- grep("^int_.*_acat_pvalue$", region_names, value = TRUE)
+  if (length(cols) == 0L && "int_acat_pvalue" %in% region_names) {
+    "int_acat_pvalue"
+  } else {
+    cols
+  }
+}
+
 egene_effect_specs <- function(int_cov, region_names) {
   if (identical(int_cov, "none")) {
-    list(list(col = "pvalue", effect = "Main only"))
-  } else {
-    specs <- list()
-    if ("main_acat_pvalue" %in% region_names) {
-      specs <- c(specs, list(list(col = "main_acat_pvalue", effect = "Main in interaction")))
-    }
-    if ("int_acat_pvalue" %in% region_names) {
-      specs <- c(specs, list(list(col = "int_acat_pvalue", effect = "Interaction")))
-    }
-    specs
+    return(list(list(col = "pvalue", effect = "Main only")))
   }
+  specs <- list()
+  if ("main_acat_pvalue" %in% region_names) {
+    specs <- c(specs, list(list(col = "main_acat_pvalue", effect = "Main in interaction")))
+  }
+  int_cols <- int_acat_cols(region_names)
+  for (col in int_cols) {
+    effect <- if (length(int_cols) == 1L) {
+      "Interaction"
+    } else {
+      term <- if (col == "int_acat_pvalue") {
+        to_snake(int_cov)
+      } else {
+        sub("_acat_pvalue$", "", sub("^int_", "", col))
+      }
+      paste("Interaction", term, sep = " / ")
+    }
+    specs <- c(specs, list(list(col = col, effect = effect)))
+  }
+  specs
 }
 
 read_egene_pvalues <- function(manifest) {
@@ -70,13 +89,13 @@ sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
 if ("data_type" %in% names(sc_data_files)) {
   sc_data_files <- filter(
     sc_data_files,
-    (model == "p_glmm_sc" & data_type == "counts") |
+    (model == "p_glmm_sc" & data_type == "sct_counts") |
       (model == "lmm_sc" & data_type == "log_counts")
   )
 } else if ("sc_type" %in% names(sc_data_files)) {
   sc_data_files <- filter(
     sc_data_files,
-    (model == "p_glmm_sc" & sc_type == "counts") |
+    (model == "p_glmm_sc" & sc_type == "sct_counts") |
       (model == "lmm_sc" & sc_type %in% c("logcounts", "log_counts"))
   )
 }
@@ -127,10 +146,12 @@ plot_data <- inner_join(
 
 n_int_covs <- n_distinct(plot_data$int_cov[plot_data$int_cov != "none"])
 
+effect_order <- unique(c(effect_levels, plot_data$effect))
+
 plot_data <- plot_data |>
   mutate(
     cell_type_label = coalesce(unname(cell_type_lookup[cell_type]), cell_type),
-    effect = factor(effect, levels = effect_levels),
+    effect = factor(effect, levels = effect_order),
     int_label = if_else(
       int_cov == "none" | n_int_covs <= 1,
       as.character(effect),

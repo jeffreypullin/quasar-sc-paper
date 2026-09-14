@@ -69,23 +69,42 @@ read_file_list <- function(path) {
     filter(k == "none", int_cov != "none")
 }
 
-# Quasar region files use feature_id / int_acat_pvalue. CASTIE step 3 is long
-# format (Gene, pval_column, ACAT_p); keep the GxC context matching int_cov.
+# Quasar region files use int_<cov>_acat_pvalue (or legacy int_acat_pvalue).
+# CASTIE step 3 is long format (Gene, pval_column, ACAT_p).
 normalise_int_region <- function(dt, int_cov) {
   if (nrow(dt) == 0L) {
     return(NULL)
   }
-  if ("int_acat_pvalue" %in% names(dt) && "feature_id" %in% names(dt)) {
-    out <- dt[, .(feature_id = as.character(feature_id), int_acat_pvalue)]
-  } else if (all(c("Gene", "pval_column", "ACAT_p") %in% names(dt))) {
+  if (all(c("Gene", "pval_column", "ACAT_p") %in% names(dt))) {
     keep <- dt[as.character(pval_column) == as.character(int_cov)]
     if (nrow(keep) == 0L) {
       return(NULL)
     }
     out <- keep[, .(
       feature_id = as.character(Gene),
+      int_cov = as.character(int_cov),
       int_acat_pvalue = as.numeric(ACAT_p)
     )]
+  } else if ("feature_id" %in% names(dt)) {
+    acat_cols <- grep("^int_.*_acat_pvalue$", names(dt), value = TRUE)
+    if (length(acat_cols) == 0L && "int_acat_pvalue" %in% names(dt)) {
+      acat_cols <- "int_acat_pvalue"
+    }
+    if (length(acat_cols) == 0L) {
+      return(NULL)
+    }
+    out <- rbindlist(lapply(acat_cols, function(col) {
+      term <- if (col == "int_acat_pvalue") {
+        to_snake(int_cov)
+      } else {
+        sub("_acat_pvalue$", "", sub("^int_", "", col))
+      }
+      dt[, .(
+        feature_id = as.character(feature_id),
+        int_cov = term,
+        int_acat_pvalue = as.numeric(get(col))
+      )]
+    }))
   } else {
     return(NULL)
   }
@@ -145,8 +164,7 @@ for (i in seq_len(nrow(sc_data_files))) {
   region_data[, `:=`(
     cell_type = info$cell_type,
     model = info$model,
-    data_type = info$data_type,
-    int_cov = info$int_cov
+    data_type = info$data_type
   )]
   region_list[[i]] <- region_data[, .(
     cell_type, model, data_type, int_cov, feature_id, int_acat_pvalue
@@ -198,44 +216,47 @@ lead_list <- list()
 
 for (i in seq_len(nrow(sc_data_files))) {
   info <- sc_data_files[i, ]
-  snake_int_cov <- to_snake(info$int_cov)
-  int_p_col <- paste0("snp_x_", snake_int_cov, "_pvalue")
-  int_beta_col <- paste0("snp_x_", snake_int_cov, "_beta")
-  int_se_col <- paste0("snp_x_", snake_int_cov, "_se")
-
-  egene_features <- int_egenes |>
+  egene_rows <- int_egenes |>
     filter(
       cell_type == info$cell_type,
       model == info$model,
-      int_cov == info$int_cov,
       (is.na(data_type) & is.na(info$data_type)) |
         (!is.na(data_type) & data_type == info$data_type)
-    ) |>
-    pull(feature_id)
-  if (length(egene_features) == 0L) {
+    )
+  if (nrow(egene_rows) == 0L) {
     next
   }
 
   variant_data <- fread(info$variant_file, showProgress = FALSE)
   variant_data <- normalise_int_variants(variant_data)
-  variant_data <- variant_data[feature_id %in% egene_features]
-  leads <- gene_int_leads(variant_data, int_p_col)
-  rm(variant_data)
 
-  if (nrow(leads) == 0L) {
-    next
+  for (term in unique(egene_rows$int_cov)) {
+    int_p_col <- paste0("snp_x_", term, "_pvalue")
+    int_beta_col <- paste0("snp_x_", term, "_beta")
+    int_se_col <- paste0("snp_x_", term, "_se")
+    if (!all(c(int_p_col, int_beta_col, int_se_col) %in% names(variant_data))) {
+      next
+    }
+    egene_features <- egene_rows |>
+      filter(int_cov == term) |>
+      pull(feature_id)
+    term_data <- variant_data[feature_id %in% egene_features]
+    leads <- gene_int_leads(term_data, int_p_col)
+    if (nrow(leads) == 0L) {
+      next
+    }
+    leads[, `:=`(
+      cell_type = info$cell_type,
+      model = info$model,
+      data_type = info$data_type,
+      int_cov = term,
+      int_beta = get(int_beta_col),
+      int_se = get(int_se_col),
+      int_pvalue = get(int_p_col)
+    )]
+    lead_list[[length(lead_list) + 1L]] <- leads[, ..variant_cols]
   }
-
-  leads[, `:=`(
-    cell_type = info$cell_type,
-    model = info$model,
-    data_type = info$data_type,
-    int_cov = info$int_cov,
-    int_beta = get(int_beta_col),
-    int_se = get(int_se_col),
-    int_pvalue = get(int_p_col)
-  )]
-  lead_list[[i]] <- leads[, ..variant_cols]
+  rm(variant_data)
 }
 
 lead_list <- lead_list[!vapply(lead_list, is.null, logical(1))]

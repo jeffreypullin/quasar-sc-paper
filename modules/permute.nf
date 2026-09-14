@@ -33,3 +33,15 @@ process PERMUTE_SC_COV_WITHIN {
     permute-sc-cov-within.R "$ind" "$cell_type" "$int_cov" "$cov"
     """
 }
+
+process PERMUTE_SC_COV_LOGCOUNT_BINS {
+    label "micro"
+
+    input: tuple val(dataset), val(int_cov), val(cell_type), val(cov), val(counts), val(ind)
+    output: tuple val(dataset), val(int_cov), val(cell_type), path("permute-logcount-bins-${cell_type}-${int_cov}-${ind}.tsv")
+
+    script:
+    """
+    permute-sc-cov-logcount-bins.R "$ind" "$cell_type" "$int_cov" "$cov" "$counts"
+    """
+}

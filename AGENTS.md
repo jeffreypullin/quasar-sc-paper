@@ -38,3 +38,26 @@ rather than execution:
 
 Then hand the change back to the user to run.
 
+## Do not change the scanpy conda environment
+
+`envs/scanpy.yaml` is load-bearing: many pipeline processes depend on its exact
+package set, and changing it can silently break unrelated steps or invalidate
+cached Nextflow tasks across a long run. **Do not add, remove, or upgrade
+dependencies in `envs/scanpy.yaml`.**
+
+If a step needs extra Python packages, create a new env file under `envs/` and
+point only the relevant process at it (e.g. add `r-phate` to `slingshot.yaml`
+rather than touching `scanpy.yaml`). Keep new envs as small as possible.
+
+## R code style
+
+When writing or editing R scripts in `bin/`:
+
+- Prefer the **tidyverse** (`dplyr`, `readr`, `tidyr`, etc.) and the native pipe
+  operator (`|>`) over base R and `%>%`, unless there is a clear speed constraint
+  (e.g. hot loops over very large data).
+- Prioritise **simplicity**: keep scripts as short and direct as possible. Avoid
+  defensive checks, verbose error handling, and extra abstractions unless the
+  pipeline step genuinely needs them. Trust that inputs come from upstream
+  Nextflow processes in the expected shape.
+

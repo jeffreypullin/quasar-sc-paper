@@ -31,14 +31,19 @@ if (cov_spec == "bulk_pca") {
   covs <- covs |>
     select(sample_id, cell_id, sex, age,
            starts_with("geno_pc"), starts_with("PC_"), "pseudotime")
-} else if (cov_spec == "bulk_pca+starcat_CD4_Naive") {
+} else if (startsWith(cov_spec, "bulk_pca+starcat_")) {
+  extra <- sub("^bulk_pca\\+", "", cov_spec)
+  extra_cols <- if (extra == "starcat_all") {
+    c(
+      "starcat_Cytotoxic", "starcat_TEMRA", "starcat_CD4_CM",
+      "starcat_CD8_EM", "starcat_CD4_Naive"
+    )
+  } else {
+    extra
+  }
   covs <- covs |>
     select(sample_id, cell_id, sex, age,
-           starts_with("geno_pc"), starts_with("PC_"), "starcat_CD4_Naive")
-} else if (cov_spec == "bulk_pca+starcat_Cytotoxic") {
-  covs <- covs |>
-    select(sample_id, cell_id, sex, age,
-           starts_with("geno_pc"), starts_with("PC_"), "starcat_Cytotoxic")
+           starts_with("geno_pc"), starts_with("PC_"), all_of(extra_cols))
 } else {
   stop("Unknown cov_spec.")
 }

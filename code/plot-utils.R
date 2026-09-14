@@ -58,6 +58,8 @@ method_lookup <- c(
   "pb-lm" = "Pseudobulk LM",
   "nb_glm" = "Pseudobulk NB-GLM",
   "pb-nb_glm" = "Pseudobulk NB-GLM",
+  "p_glmm" = "Pseudobulk P-GLMM",
+  "pb-p_glmm" = "Pseudobulk P-GLMM",
   "p_glmm_sc" = "Single-cell P-GLMM",
   "sc-p_glmm_sc" = "Single-cell P-GLMM",
   "lmm_sc" = "Single-cell LMM",
@@ -69,6 +71,7 @@ method_col_lookup <- c(
   "CASTIE" = "#332288",
   "Pseudobulk LM" = "#AA4499",
   "Pseudobulk NB-GLM" = "#DDCC77",
+  "Pseudobulk P-GLMM" = "#117733",
   "Single-cell P-GLMM" = "#882255",
   "Single-cell LMM" = "#44AA99"
 )
@@ -80,7 +83,9 @@ cell_type_cols <- c(
 )
 
 cell_type_lookup <- c(
-    "Plasma" = "Plasma", 
+    "Plasma" = "Plasma",
     "B_IN" = "B IN",
-    "CD4_NC" = "CD4 NC"
+    "CD4_NC" = "CD4 NC",
+    "B_all" = "B all",
+    "T_all" = "T all"
 )

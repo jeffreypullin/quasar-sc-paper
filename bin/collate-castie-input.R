@@ -14,6 +14,7 @@ sc_counts_file <- args[3]
 covs_file <- args[4]
 anno_file <- args[5]
 safe_cell_type <- args[6]
+int_cov <- args[7]
 
 sc_counts <- read_tsv(sc_counts_file, show_col_types = FALSE)
 covs <- read_tsv(covs_file, show_col_types = FALSE)
@@ -31,13 +32,13 @@ sc_counts <- sc_counts |>
   select(sample_id, cell_id, log_cell_read_counts, any_of(chr_genes))
 
 covs <- covs |>
-  select(cell_id, sex, age, paste0("PC_", 1:2), paste0("geno_pc", 1:6), pseudotime)
+  select(cell_id, sex, age, paste0("PC_", 1:2), paste0("geno_pc", 1:6), all_of(int_cov))
 
 all_data <- inner_join(sc_counts, covs, by = "cell_id") |>
-  filter(!is.na(pseudotime), !is.na(sample_id)) |>
+  filter(!is.na(.data[[int_cov]]), !is.na(sample_id)) |>
   select(
     sample_id, cell_id, sex, age, paste0("PC_", 1:2), paste0("geno_pc", 1:6),
-    pseudotime, log_cell_read_counts, any_of(chr_genes)
+    all_of(int_cov), log_cell_read_counts, any_of(chr_genes)
   )
 
 write_tsv(
