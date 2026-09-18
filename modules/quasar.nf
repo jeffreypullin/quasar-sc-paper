@@ -37,9 +37,7 @@ process FILTER_COVS {
 
 process ANNOTATE_PHENO {
 
-    input: 
-        tuple val(pb_type), val(info), val(expr_covs)
-        val annot_bed
+    input: tuple val(pb_type), val(info), val(expr_covs), path(annot_bed)
     output: tuple val(info), val(pb_type), path("${info.dataset}-${info.cell_type}-annot-pheno.tsv")
 
     script:
@@ -73,7 +71,7 @@ process RUN_QUASAR_PB {
       -c "$covs" \
       -o "${info.dataset}-${info.model}-${info.chr}-${info.cell_type}-${info.int_cov}" \
       --model "${info.model}" \
-      --mode                                                                        cis \
+      --mode                                                                             cis \
       ${quant_res_flag} \
       ${apl_flag} \
       ${int_flag} \

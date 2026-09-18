@@ -19,76 +19,6 @@ args <- commandArgs(trailingOnly = TRUE)
 pb_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
   filter(int_cov == "none")
 
-#pb_data_files |>
-#  filter(model == "nb_glm") |>
-#  filter(cell_frac == 1) |>
-#  filter(indiv_frac == 1) |>
-#  filter(count_frac == 1) |>
-#  select(cell_type, variant_file) |>
-#  mutate(
-#    variant_data = map(
-#      variant_file,
-#      ~ read_tsv(.x, show_col_types = FALSE) |>
-#        select(feature_id, pvalue)
-#    )
-#  ) |>
-#  select(-variant_file) |>
-#  unnest(variant_data) |>
-#  filter(!is.na(pvalue), pvalue < 5e-10) |>
-#  distinct(cell_type, feature_id) |>
-#  arrange(cell_type, feature_id) |>
-#  print(n = Inf)
-#2 + "dsjlk"
-
-#b_in_prop_data <- pb_data_files |>
-#  filter(cell_type == "B_IN") |>
-#  slice(1) |>
-#  pull(prop_file) |>
-#  read_tsv(show_col_types = FALSE) |>
-#  mutate(cell_type = "B_IN")
-
-#cd4_nc_prop_data <- pb_data_files |>
-#  filter(cell_type == "CD4_NC") |>
-#  slice(1) |>
-#  pull(prop_file) |>
-#  read_tsv(show_col_types = FALSE) |>
-#  mutate(cell_type = "CD4_NC")
-
-#plasma_prop_data <- pb_data_files |>
-#  filter(cell_type == "Plasma") |>
-#  slice(1) |>
-#  pull(prop_file) |>
-#  read_tsv(show_col_types = FALSE) |>
-#  mutate(cell_type = "Plasma")
-
-#prop_data <- bind_rows(
-#  plasma_prop_data,
-#  cd4_nc_prop_data,
-#  b_in_prop_data
-#)
-
-#pb_data_files |>
-#  rowwise() |>
-#  mutate(var_data = list(read_tsv(variant_file, show_col_types = FALSE))) |>
-#  ungroup() |>
-#  unnest(cols = var_data) |>
-#  pull(maf) |>
-#  summary() |>
-#  print()
-
-#pb_data_files |>
-#  rowwise() |>
-#  mutate(var_data = list(read_tsv(variant_file, show_col_types = FALSE))) |>
-#  ungroup() |>
-#  unnest(cols = var_data) |>
-#  filter(pvalue < 5e-9) |>
-#  left_join(prop_data, by = c("feature_id", "cell_type")) |>
-#  select(cell_type, feature_id, snp_id, pvalue, maf, beta, se, phi, pb_cv, pb_mean, pb_non_zero_frac) |>
-#  distinct(cell_type, feature_id, .keep_all = TRUE) |>
-#  print(n = 50)
-
-#2 + "fdks"
-
 compute_qq_data_pb <- function(variant_files, prop_file) {
 
   variant_data <- bind_rows(!!!map(
@@ -106,15 +36,7 @@ compute_qq_data_pb <- function(variant_files, prop_file) {
     prop_data,
     by = "feature_id"
   ) |>
-    filter(!is.na(pvalue)) |>
-    filter(maf > 0.05) |>
-    filter(pb_non_zero_frac > 0.1)
-
-  #if ("pb_cv" %in% colnames(pvalue_data)) {
-    #cutoff <- quantile(pvalue_data$pb_cv, 0.50, na.rm = TRUE)
-    #pvalue_data <- pvalue_data |>
-    #  filter(pb_cv <= cutoff)
-  #}
+    filter(!is.na(pvalue))
 
   pvalue <- pvalue_data$pvalue
   n <- length(pvalue)
@@ -144,7 +66,7 @@ compute_qq_data_pb <- function(variant_files, prop_file) {
 }
 
 pb_overall_plot_data <- pb_data_files |>
-  filter(model == "nb_glm") |>
+  filter(model == "lm") |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
   filter(count_frac == 1) |>

@@ -13,7 +13,10 @@ def flatten(xss):
     return [x for xs in xss for x in xs]
 
 cell_label = sys.argv[1]
-adata = sc.read_h5ad(sys.argv[2])
+adata = sc.read_h5ad(sys.argv[2], backed="r")
+adata = adata[
+    cell_label_mask(adata.obs["cell_label"], cell_label).to_numpy()
+].to_memory()
 
 sc.pp.filter_genes(adata, min_cells=3)
 
@@ -21,13 +24,9 @@ adata.layers["counts"] = adata.X.copy()
 sc.pp.normalize_total(adata)
 sc.pp.log1p(adata)
 
-cell_type_subset = adata[
-    cell_label_mask(adata.obs["cell_label"], cell_label), :
-]
-
 pbs = []
-for indiv in cell_type_subset.obs.individual.unique():
-    indiv_cell_subset = cell_type_subset[cell_type_subset.obs['individual'] == indiv]
+for indiv in adata.obs.individual.unique():
+    indiv_cell_subset = adata[adata.obs['individual'] == indiv]
     
     rep_adata = sc.AnnData(X = indiv_cell_subset.X.mean(axis = 0),
                            var = indiv_cell_subset.var[[]])

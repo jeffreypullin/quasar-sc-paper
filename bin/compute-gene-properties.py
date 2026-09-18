@@ -48,14 +48,14 @@ def compute_gene_stats(X):
 cell_label = sys.argv[1]
 cell_frac = float(sys.argv[2])
 indiv_frac = float(sys.argv[3])
-adata = sc.read_h5ad(sys.argv[4])
+adata = sc.read_h5ad(sys.argv[4], backed="r")
 anno_df = pd.read_csv(sys.argv[5], sep="\t")
 n_cells_target = int(sys.argv[6])
 count_frac = float(sys.argv[7]) if len(sys.argv) > 7 else 1.0
 
 subset = adata[
-    cell_label_mask(adata.obs["cell_label"], cell_label), :
-].copy()
+    cell_label_mask(adata.obs["cell_label"], cell_label).to_numpy()
+].to_memory()
 
 subset = downsample_individuals_to_n_cells(
     subset,

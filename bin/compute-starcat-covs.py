@@ -38,10 +38,12 @@ score_cols = [
 cov_names = {col: "starcat_" + col.replace("-", "_") for col in score_cols}
 
 cell_label = sys.argv[1]
-adata = sc.read_h5ad(sys.argv[2])
+adata = sc.read_h5ad(sys.argv[2], backed="r")
 starcat_cache = sys.argv[3] if len(sys.argv) > 3 else "cache"
 
-subset = adata[cell_label_mask(adata.obs["cell_label"], cell_label).to_numpy(), :].copy()
+subset = adata[
+    cell_label_mask(adata.obs["cell_label"], cell_label).to_numpy()
+].to_memory()
 
 gene_symbols = subset.var["GeneSymbol"].astype(str).str.strip()
 keep_genes = (gene_symbols != "") & (gene_symbols.str.lower() != "nan")

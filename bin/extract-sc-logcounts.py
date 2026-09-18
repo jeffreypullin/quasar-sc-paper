@@ -2,7 +2,6 @@
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import scanpy as sc
 import scipy.sparse as sp
@@ -30,14 +29,12 @@ GENES = list(dict.fromkeys(genes_df["feature_id"].dropna().astype(str).tolist())
 if not GENES:
     sys.exit(f"no feature_id values found in genes TSV for cell type {cell_type}")
 
-adata = sc.read_h5ad(adata_path)
-sc.pp.normalize_total(adata)
-sc.pp.log1p(adata)
-
-row_idx = np.flatnonzero(
+adata = sc.read_h5ad(adata_path, backed="r")
+cell_type_subset = adata[
     cell_label_mask(adata.obs["cell_label"], cell_type).to_numpy()
-)
-cell_type_subset = adata[row_idx, :].copy()
+].to_memory()
+sc.pp.normalize_total(cell_type_subset)
+sc.pp.log1p(cell_type_subset)
 
 missing = [g for g in GENES if g not in cell_type_subset.var_names]
 if missing:

@@ -251,6 +251,20 @@ process COMPUTE_PB_LOGCOUNTS{
     """
 }
 
+process COMPUTE_PB_TMM_INT{
+    conda "$projectDir/envs/scanpy.yaml"
+    label "high_mem"
+
+    input: tuple val(info), val(raw_sc_data), val(gene_properties)
+    output: tuple val("tmm_int"), val(info), path("${info.dataset}-${info.cell_type}-pb-pheno.tsv")
+
+    script:
+    """
+    compute-pb-tmm-int.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.n_cells_target}" "${info.count_frac}"
+    mv "${info.cell_type}-pb-pheno.tsv" "${info.dataset}-${info.cell_type}-pb-pheno.tsv"
+    """
+}
+
 process COMPUTE_CLUSTER_SIZES{
     conda "$projectDir/envs/scanpy.yaml"
     label "high_mem"
@@ -355,24 +369,24 @@ process COMPUTE_GENOTYPE_PCS {
 process CREATE_ANNOT_BED {
     conda "$projectDir/envs/annotation.yaml"
 
-    input: val url
-    output: path("Homo_sapiens.GRCh37.82.bed")
+    input: tuple val(dataset), val(url)
+    output: tuple val(dataset), path("${dataset}-annot.bed")
 
     script:
     """
-    wget -O Homo_sapiens.GRCh37.82.gtf.gz $url
+    wget -O annotation.gtf.gz $url
 
     collapse-annotation.py \
-        Homo_sapiens.GRCh37.82.gtf.gz \
-        Homo_sapiens.GRCh37.82.genes.gtf \
+        annotation.gtf.gz \
+        genes.gtf \
         --collapse_only
 
-    gtf-to-tss.py
+    gtf-to-tss.py genes.gtf annot.bed.gz
 
-    zcat Homo_sapiens.GRCh37.82.bed.gz | \
-        awk -F'\t' -v OFS='\t' '\$1 ~ /(^[1-9]\$)|(^1[0-9]\$)|(^2[012]\$)/ {print \$1,\$2,\$3,\$4}' > \
-        Homo_sapiens.GRCh37.82.bed
-    sed -i "1i #chr\tstart\tend\tphenotype_id" Homo_sapiens.GRCh37.82.bed 
+    zcat annot.bed.gz | \
+        awk -F'\\t' -v OFS='\\t' '\$1 ~ /(^[1-9]\$)|(^1[0-9]\$)|(^2[012]\$)/ {print \$1,\$2,\$3,\$4}' > \
+        ${dataset}-annot.bed
+    sed -i "1i #chr\tstart\tend\tphenotype_id" ${dataset}-annot.bed
     """
 }
 

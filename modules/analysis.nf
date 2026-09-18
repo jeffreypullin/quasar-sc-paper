@@ -813,9 +813,7 @@ process PLOT_CLUMPED {
 process COMPUTE_GENE_PROPERTIES {
     label "high_mem"
 
-    input:
-        tuple val(info), val(adata)
-        val anno_file
+    input: tuple val(info), val(adata), path(anno_file)
     output: tuple val(info), path("${info.dataset}-${info.cell_type}-gene-properties.tsv")
 
     script:
@@ -864,5 +862,22 @@ process RUN_COLOC {
     script:
     """
     run-coloc.R $sc_quasar_file
+    """
+}
+
+process PLOT_TREMOR_TENSORQTL {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        path samples
+        path summaries
+    output:
+        path("tremor-lm-vs-tensorqtl.pdf")
+        path("tremor-lm-vs-tensorqtl-summary.tsv")
+
+    script:
+    """
+    plot-tremor-tensorqtl.R $samples $summaries
     """
 }

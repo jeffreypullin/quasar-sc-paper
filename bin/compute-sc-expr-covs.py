@@ -15,19 +15,19 @@ def flatten(xss):
     return [x for xs in xss for x in xs]
 
 cell_label = sys.argv[1]
-adata = sc.read_h5ad(sys.argv[2])
+adata = sc.read_h5ad(sys.argv[2], backed="r")
+subset = adata[
+    cell_label_mask(adata.obs["cell_label"], cell_label).to_numpy()
+].to_memory()
 
-sc.pp.filter_genes(adata, min_cells=3)
+sc.pp.filter_genes(subset, min_cells=3)
 
-adata.layers["counts"] = adata.X.copy()
-sc.pp.normalize_total(adata)
-sc.pp.log1p(adata)
+subset.layers["counts"] = subset.X.copy()
+sc.pp.normalize_total(subset)
+sc.pp.log1p(subset)
 
 # Mitochondrial percentaage.
 
-subset = adata[
-    cell_label_mask(adata.obs["cell_label"], cell_label), :
-].copy()
 subset.var["GeneSymbol"] = subset.var["GeneSymbol"].str.lstrip()
 
 #mt_genes = sc.queries.mitochondrial_genes("hsapiens", attrname='ensembl_gene_id')

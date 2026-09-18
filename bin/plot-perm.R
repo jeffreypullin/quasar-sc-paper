@@ -159,14 +159,15 @@ overall_plot_data <- sc_data_files |>
   select(-file_list) |>
   unnest(cols = qq_data)
 
+ct_levels <- unname(cell_type_lookup[
+  names(cell_type_lookup) %in% unique(overall_plot_data$cell_type)
+])
+
 overall_p <- overall_plot_data |>
   filter(cell_type %in% names(cell_type_lookup)) |>
   filter(model %in% names(method_lookup)) |>
   mutate(
-    cell_type = factor(
-      cell_type_lookup[cell_type],
-      levels = cell_type_lookup[c("CD4_NC", "B_IN", "Plasma")]
-    ),
+    cell_type = factor(unname(cell_type_lookup[cell_type]), levels = ct_levels),
     model = factor(
       method_lookup[model],
       levels = unique(unname(method_lookup[c("p_glmm_sc", "lmm_sc")]))
@@ -179,7 +180,8 @@ overall_p <- overall_plot_data |>
   geom_abline(linetype = "dashed") +
   geom_ribbon(linetype = 2, alpha = 0.1) +
   scale_colour_manual(
-    values = setNames(cell_type_cols, cell_type_lookup[names(cell_type_cols)])
+    values = setNames(cell_type_cols, cell_type_lookup[names(cell_type_cols)]),
+    drop = TRUE
   ) +
   facet_grid(vars(model), vars(cell_type)) +
   labs(

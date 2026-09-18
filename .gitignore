@@ -4,3 +4,4 @@ output/
 .nextflow/
 data
 nextflow
+__pycache__/

@@ -1,0 +1,10 @@
+name: tremor-tensorqtl
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - pandas
+  - pyarrow
+  - numpy
+  - anndata

@@ -63,7 +63,8 @@ method_lookup <- c(
   "p_glmm_sc" = "Single-cell P-GLMM",
   "sc-p_glmm_sc" = "Single-cell P-GLMM",
   "lmm_sc" = "Single-cell LMM",
-  "sc-lmm_sc" = "Single-cell LMM"
+  "sc-lmm_sc" = "Single-cell LMM",
+  "tensorqtl" = "TensorQTL"
 )
 
 method_col_lookup <- c(
@@ -73,13 +74,19 @@ method_col_lookup <- c(
   "Pseudobulk NB-GLM" = "#DDCC77",
   "Pseudobulk P-GLMM" = "#117733",
   "Single-cell P-GLMM" = "#882255",
-  "Single-cell LMM" = "#44AA99"
+  "Single-cell LMM" = "#44AA99",
+  "TensorQTL" = "#0077BB"
 )
 
 cell_type_cols <- c(
   "Plasma" = "#66CCEE",
   "B_IN" = "#228833",
-  "CD4_NC" = "#EE6677"
+  "CD4_NC" = "#EE6677",
+  "Bergmann" = "#CC6677",
+  "Microglia" = "#4477AA",
+  "Golgi" = "#EE6677",
+  "UBC" = "#228833",
+  "Endocytes" = "#CCBB44"
 )
 
 cell_type_lookup <- c(
@@ -87,5 +94,10 @@ cell_type_lookup <- c(
     "B_IN" = "B IN",
     "CD4_NC" = "CD4 NC",
     "B_all" = "B all",
-    "T_all" = "T all"
+    "T_all" = "T all",
+    "Bergmann" = "Bergmann",
+    "Microglia" = "Microglia",
+    "Golgi" = "Golgi",
+    "UBC" = "UBC",
+    "Endocytes" = "Endocytes"
 )

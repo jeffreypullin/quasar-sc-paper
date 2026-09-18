@@ -1,11 +1,9 @@
 #! /usr/bin/env python3
 
 import sys
-import os
 from pathlib import Path
 import scanpy as sc
 import pandas as pd
-import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "code"))
 from subsample_cells import subsample_cells_within_individuals  # noqa: E402
@@ -20,16 +18,15 @@ def flatten(xss):
 cell_label = sys.argv[1]
 cell_frac = float(sys.argv[2])
 indiv_frac = float(sys.argv[3])
-adata = sc.read_h5ad(sys.argv[4])
+adata = sc.read_h5ad(sys.argv[4], backed="r")
 gene_prop_data = pd.read_csv(sys.argv[5], sep="\t")
 n_cells_target = int(sys.argv[6])
 count_frac = float(sys.argv[7]) if len(sys.argv) > 7 else 1.0
 
 keep_genes = gene_prop_data.loc[gene_prop_data['sc_non_zero_frac'] > 0.01, 'feature_id'].values
-row_idx = np.flatnonzero(
+adata_rows = adata[
     cell_label_mask(adata.obs["cell_label"], cell_label).to_numpy()
-)
-adata_rows = adata[row_idx, :].copy()
+].to_memory()
 cell_type_subset = adata_rows[:, list(keep_genes)].copy()
 
 cell_type_subset = downsample_individuals_to_n_cells(
