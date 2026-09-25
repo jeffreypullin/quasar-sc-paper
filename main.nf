@@ -136,7 +136,13 @@ workflow {
         tremor_sample_map = BUILD_TREMOR_SAMPLE_MAP(
             vcf_files
                 .filter { dataset, chr, vcf -> dataset == "tremor" }
-                .map { dataset, chr, vcf -> tuple(dataset, vcf) }
+                .map { dataset, chr, vcf ->
+                    tuple(
+                        dataset,
+                        vcf,
+                        file("$projectDir/resources/tremor-sample-map.tsv")
+                    )
+                }
                 .first()
         )
         harmonised_tremor = HARMONISE_TREMOR_H5AD(

@@ -1,5 +1,5 @@
 include {
-    PLOT_POWER ; PLOT_POWER_COVS ; PLOT_CONVERGENCE ; PLOT_PERM ;
+    PLOT_POWER ; PLOT_POWER_QUASAR ; PLOT_POWER_COVS ; PLOT_CONVERGENCE ; PLOT_PERM ;
     PLOT_PERM_CELL_FRAC ; PLOT_PERM_COUNT_FRAC ; PLOT_PERM_PB ;
     PLOT_TIME ; PLOT_CONCORDANCE ; PLOT_UNIQUE_SC_EGENES ;
     PLOT_UNIQUE_PB_EGENES ; PLOT_EGENE_SIG_MODEL ; PLOT_POWER_CELL_FRAC ;
@@ -48,6 +48,7 @@ workflow RUN_PLOTS {
     main:
     // PLOT_CLUMPED(clumped_pb_quasar_file, clumped_sc_quasar_file)
     // PLOT_POWER(pb_quasar_file, sc_quasar_file, saigeqtl_file)
+    PLOT_POWER_QUASAR(pb_quasar_file, sc_quasar_file)
     // PLOT_POWER_N_CELLS_FILTER(pb_quasar_file, sc_quasar_file)
     // PLOT_POWER_OFFSET(sc_offset_quasar_file)
     // unique_egenes_tsv = PLOT_UNIQUE_SC_EGENES(pb_quasar_file, sc_quasar_file)

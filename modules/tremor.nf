@@ -2,13 +2,13 @@ process BUILD_TREMOR_SAMPLE_MAP {
     conda "$projectDir/envs/scanpy.yaml"
     label "tiny"
 
-    input: tuple val(dataset), val(vcf)
+    input: tuple val(dataset), val(vcf), path(curated_map, stageAs: "curated-sample-map.tsv")
     output: tuple val(dataset), path("${dataset}-sample-map.tsv")
 
     script:
     """
     build-tremor-sample-map.py \\
-        "$projectDir/resources/tremor-sample-map.tsv" \\
+        "$curated_map" \\
         "$vcf" \\
         "${dataset}-sample-map.tsv"
     """

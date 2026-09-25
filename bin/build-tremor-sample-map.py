@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
-# Emit the curated VCF IID → AnnData donor_id map, validated against a Tremor VCF.
-#
-# The published wells / Supp Table 1 order is NOT the GSA loading order. The map in
-# resources/tremor-sample-map.tsv was recovered by matching published TensorQTL
-# cis-eQTL dosages to pseudobulk expression (Hungarian assignment on INT-normalised
-# slope-weighted fingerprints; LOCO stability ~86%; recovers TensorQTL effect signs).
+# Validate the curated VCF IID → donor_id map against a Tremor VCF.
 
 import gzip
 import sys
-from pathlib import Path
 
 import pandas as pd
 
@@ -37,7 +31,6 @@ if missing_ids:
     )
 
 out = by_iid.loc[vcf_ids].reset_index()
-# Keep donor_id first for plink --update-ids (newIID = column 1 in NF awk).
 cols = ["donor_id", "vcf_iid"] + [
     c for c in out.columns if c not in {"donor_id", "vcf_iid"}
 ]

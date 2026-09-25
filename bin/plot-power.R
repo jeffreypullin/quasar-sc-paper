@@ -184,7 +184,6 @@ ggsave(
   width = 16,
   height = 10
 )
-
 #frac_p <- sc_n_sig_var_data |>
 #  summarise(
 #    n_sig_variant = sum(n_sig_variant),
@@ -219,4 +218,5 @@ ggsave(
   width = 12,
   height = 8
 )
+
 

@@ -18,7 +18,7 @@ SEX_ONTOLOGY_MAP = {
     "PATO:0000384": 1,  # male
     "PATO:0000383": 2,  # female
 }
-DONOR_TYPOS = {"SK00397": "SK00387"}
+DONOR_TYPOS = {"SK00387": "SK00397"}
 CELL_LABEL_MAP = {
     "granule cell": "Granule",
     "granule cells": "Granule",
@@ -87,6 +87,8 @@ indiv_col = first_col(adata.obs, INDIV_COLS)
 adata.obs["individual"] = (
     adata.obs[indiv_col].astype(str).replace(DONOR_TYPOS)
 )
+if "donor_id" in adata.obs.columns:
+    adata.obs["donor_id"] = adata.obs["donor_id"].astype(str).replace(DONOR_TYPOS)
 
 if sample_map_path is not None:
     keep = (

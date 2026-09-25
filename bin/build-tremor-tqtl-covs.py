@@ -28,16 +28,16 @@ adata = sc.read_h5ad(h5ad_path, backed="r")
 meta = (
     adata.obs[
         [
-            "donor_id",
+            "individual",
             "age",
             "sex_ontology_term_id",
             "disease_ontology_term_id",
             "seq_batch",
         ]
     ]
-    .drop_duplicates("donor_id")
-    .assign(donor_id=lambda d: d.donor_id.astype(str))
-    .set_index("donor_id")
+    .drop_duplicates("individual")
+    .assign(individual=lambda d: d.individual.astype(str))
+    .set_index("individual")
     .reindex(donors)
 )
 

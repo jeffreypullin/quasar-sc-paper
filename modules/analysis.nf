@@ -16,6 +16,21 @@ process PLOT_POWER {
     """
 }
 
+process PLOT_POWER_QUASAR {
+    publishDir "output"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        path "power-quasar-comparison-plot.pdf"
+
+    script:
+    """
+    plot-power-quasar.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
 process PLOT_POWER_N_CELLS_FILTER {
     publishDir "output"
 
