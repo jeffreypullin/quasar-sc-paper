@@ -105,7 +105,7 @@ process RUN_QUASAR_SC {
       --sc-pheno "$pheno_bed" \
       --anno "$anno" \
       --cov "$covs" \
-      --out "${base}" \
+      --out    "${base}" \
       --model                                                                                                                                                                                                                                                                 ${info.model} \
       --mode cis \
       ${int_flag} \

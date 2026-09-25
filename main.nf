@@ -7,7 +7,8 @@ include {
     COMPUTE_SC_COUNTS ; COMPUTE_SC_SCT_COUNTS ; COMPUTE_SC_LOGCOUNTS ; EXTRACT_SC_LOGCOUNTS ;
     EXTRACT_SC_LOGCOUNTS as EXTRACT_SC_LOGCOUNTS_PB_UNIQUE ;
     COMPUTE_PB_COUNTS ; 
-    COMPUTE_CLUSTER_SIZES ; COMPUTE_PB_EXPR_COVS ; COMPUTE_SC_EXPR_COVS ; 
+    COMPUTE_CLUSTER_SIZES ; SUMMARISE_DATASET_QC ;
+    COMPUTE_PB_EXPR_COVS ; COMPUTE_SC_EXPR_COVS ; 
     COMPUTE_GENOTYPE_PCS ; CREATE_ANNOT_BED ; COMPUTE_PB_LOGCOUNTS ; COMPUTE_PB_TMM_INT ; 
     CREATE_GRM ; PREPARE_SLINGSHOT_ADATA ; PREPARE_SEACELLS_ADATA ; 
     RUN_SLINGSHOT ; JOIN_SC_INT_COVS ; JOIN_PB_INT_COVS ;
@@ -49,31 +50,7 @@ include { PERMUTE_BED ; PERMUTE_COV ; PERMUTE_SC_COV_WITHIN ;
           PERMUTE_BED as PERMUTE_BED_GWAS ;
           PERMUTE_BED as PERMUTE_BED_PB ;
           PERMUTE_COV as PERMUTE_SC_COV } from './modules/permute'
-include { 
-    PLOT_POWER ; PLOT_POWER_COVS ; PLOT_CONVERGENCE ; PLOT_PERM ; 
-    PLOT_PERM_CELL_FRAC ; PLOT_PERM_COUNT_FRAC ;
-    PLOT_PERM_PB ; PLOT_TIME ; PLOT_CONCORDANCE ; PLOT_UNIQUE_SC_EGENES ;
-    PLOT_UNIQUE_PB_EGENES ; PLOT_EGENE_SIG_MODEL ;     PLOT_POWER_CELL_FRAC ; PLOT_POWER_COUNT_FRAC ;
-    PLOT_POWER_INDIV_FRAC ; PLOT_POWER_BOTH_FRAC ; PLOT_POWER_GENE_PROP ; PLOT_METHOD_SCATTER ;
-    COMPUTE_GENE_PROPERTIES ; PLOT_GENE_PROPERTIES ; PLOT_PERM_INT ;
-    PLOT_INT_OUTPUT ; PLOT_GWAS_OUTPUT ; CREATE_EXAMPLE_DATA ;
-    PLOT_PERM_GLOBAL ; PLOT_PERM_GWAS ; PLOT_PVALUE_SCATTER ; PLOT_MAIN_VS_INT ;
-    PLOT_INT_TIME ; PLOT_QUASAR_INT_TIME ;
-    PLOT_SC_INT_OUTPUT ; PLOT_QUASAR_SC_INT_OUTPUT ; PLOT_PERM_SC_INT ; PLOT_PERM_SC_INT_WITHIN ;
-    PLOT_PERM_SC_INT_LOGCOUNT_BINS ; 
-    // CLUMP_VARIANTS ; 
-    PLOT_PERM_SC_GROUPED ; PLOT_GROUPED_SC_OUTPUT ; PLOT_GROUPED_VS_INT ;
-    PLOT_GROUPED_INT_TIME ;
-    PLOT_SC_PGLMM_VS_LMM ; 
-    PLOT_PERM_SC_INT_GLOBAL ; // PLOT_CLUMPED ; 
-    PLOT_SC_INT_FIGURES ; PLOT_UNIQUE_SC_EGENE_FIGURES ;
-    PLOT_UNIQUE_PB_EGENE_FIGURES ;
-    PLOT_METACELL_OUTPUT ; PLOT_CSAQTL_OUTPUT ;     PLOT_PC_GWAS_OUTPUT ;
-    PLOT_PC_GWAS_COMPARISON ; RUN_COLOC ; PLOT_CELLS_PER_INDIV ; PLOT_POWER_N_CELLS_FILTER ;
-    PLOT_POWER_OFFSET ; PLOT_ZSCORE_SCATTER ; PLOT_TREMOR_TENSORQTL
-    } from './modules/analysis'
-// include { CLUMP_VARIANTS as CLUMP_VARIANTS_PB } from "./modules/analysis"
-// include { CLUMP_VARIANTS as CLUMP_VARIANTS_SC } from "./modules/analysis"
+include { COMPUTE_GENE_PROPERTIES } from './modules/analysis'
 include { COMPUTE_CONVERGENCE as COMPUTE_CONVERGENCE_PB } from './modules/analysis'
 include { COMPUTE_CONVERGENCE as COMPUTE_CONVERGENCE_SC } from './modules/analysis'
 include {
@@ -81,6 +58,12 @@ include {
     DOWNLOAD_TREMOR_TENSORQTL ; EXTRACT_TREMOR_GENE_MAP ; BUILD_TREMOR_VARIANT_MAP ;
     BUILD_TREMOR_TQTL_COVS ; PREPARE_TREMOR_TENSORQTL_COMPARISON
 } from './modules/tremor'
+include {
+    CONVERT_RANDOLPH_SEURAT ; ASSEMBLE_RANDOLPH_H5AD ; CONVERT_RANDOLPH_GENOTYPES ;
+    CONVERT_RANDOLPH_ANNOT ; BUILD_RANDOLPH_COVS ; EXPAND_RANDOLPH_SC_COVS
+} from './modules/randolph'
+include { COLLECT_MANIFESTS } from './workflows/manifests'
+include { RUN_PLOTS } from './workflows/plotting'
 
 workflow {
 
@@ -92,11 +75,32 @@ workflow {
         if (!params.dataset_configs.containsKey(name)) {
             error "Unknown dataset '${name}'. Available: ${params.dataset_configs.keySet().join(', ')}"
         }
-        if (!params.dataset_configs[name].annot_bed_url) {
+        if (name != "randolph" && !params.dataset_configs[name].annot_bed_url) {
             error "dataset_configs.${name} is missing annot_bed_url"
         }
     }
     def active_configs = params.dataset_configs.findAll { name, dcfg -> name in active_datasets }
+    def wants_randolph = "randolph" in active_datasets
+    def is_randolph_dataset = { ds -> ds.toString().startsWith("randolph_") }
+    def randolph_condition = { ds ->
+        def s = ds.toString()
+        s.endsWith("_flu") ? "flu" : "NI"
+    }
+
+    // Expand --datasets randolph into condition strata used as dataset keys.
+    def stratum_configs = [:]
+    active_configs.each { name, dcfg ->
+        if (name == "randolph") {
+            ["NI", "flu"].each { cond ->
+                stratum_configs["randolph_${cond}"] = dcfg + [
+                    condition: cond,
+                    parent_dataset: "randolph",
+                ]
+            }
+        } else {
+            stratum_configs[name] = dcfg + [condition: null, parent_dataset: name]
+        }
+    }
 
     // Joint cell × individual fraction grid for CD4_NC power heatmap.
     def joint_fracs = [0.1d, 0.25d, 0.5d, 0.75d, 1.0d]
@@ -107,40 +111,112 @@ workflow {
     }
 
     // Per-dataset h5ad sources tagged with the dataset name: tuple(dataset, h5ad).
+    // Randolph strata are filled after Seurat → H5AD conversion below.
     ds_meta = channel.fromList(
-        active_configs.collect { name, dcfg -> tuple(name, file(dcfg.sc_data)) }
+        active_configs
+            .findAll { name, dcfg -> name != "randolph" }
+            .collect { name, dcfg -> tuple(name, file(dcfg.sc_data)) }
     )
 
     // Per-dataset VCFs tagged with the dataset name: tuple(dataset, chr, vcf).
     vcf_files = channel.empty()
     active_configs.each { name, dcfg ->
+        if (name == "randolph") {
+            return
+        }
         vcf_files = vcf_files.mix(
             channel.fromFilePairs(dcfg.vcf_glob, size: 1, flat: true)
                 .map { chr, vcf -> tuple(name, chr, vcf) }
         )
     }
 
-    tremor_sample_map = BUILD_TREMOR_SAMPLE_MAP(
-        vcf_files
-            .filter { dataset, chr, vcf -> dataset == "tremor" }
-            .map { dataset, chr, vcf -> tuple(dataset, vcf) }
-            .first()
-    )
+    tremor_sample_map = Channel.empty()
+    harmonised_tremor = Channel.empty()
+    if ("tremor" in active_datasets) {
+        tremor_sample_map = BUILD_TREMOR_SAMPLE_MAP(
+            vcf_files
+                .filter { dataset, chr, vcf -> dataset == "tremor" }
+                .map { dataset, chr, vcf -> tuple(dataset, vcf) }
+                .first()
+        )
+        harmonised_tremor = HARMONISE_TREMOR_H5AD(
+            ds_meta
+                .filter { dataset, _ -> dataset == "tremor" }
+                .combine(tremor_sample_map, by: 0)
+        )
+    }
 
     ds_meta = ds_meta
         .filter { dataset, _ -> dataset != "tremor" }
-        .mix(
-            HARMONISE_TREMOR_H5AD(
-                ds_meta
-                    .filter { dataset, _ -> dataset == "tremor" }
-                    .combine(tremor_sample_map, by: 0)
+        .mix(harmonised_tremor)
+
+    // Randolph: cluster Seurat objects → MTX → condition-stratified H5AD.
+    randolph_mtx = Channel.empty()
+    randolph_h5ad = Channel.empty()
+    randolph_geno_beds = Channel.empty()
+    randolph_annot = Channel.empty()
+    if (wants_randolph) {
+        def rcfg = params.dataset_configs.randolph
+        randolph_mtx = CONVERT_RANDOLPH_SEURAT(
+            channel.fromList(
+                rcfg.seurat_clusters.collect { cluster, seurat_rds ->
+                    tuple(
+                        "randolph",
+                        cluster,
+                        file(seurat_rds),
+                        file(rcfg.metadata)
+                    )
+                }
             )
         )
+        randolph_h5ad = ASSEMBLE_RANDOLPH_H5AD(
+            randolph_mtx
+                .map { dataset, cluster, mtx -> tuple(dataset, mtx) }
+                .groupTuple()
+                .combine(Channel.of("NI", "flu"))
+                .map { dataset, mtx_dirs, cond -> tuple(dataset, cond, mtx_dirs) }
+        )
+        ds_meta = ds_meta.mix(randolph_h5ad)
 
-    ids = EXTRACT_INDIV_IDS(ds_meta.filter { dataset, _ -> dataset != 'tremor' })
+        randolph_geno_beds = CONVERT_RANDOLPH_GENOTYPES(
+            Channel.value(tuple(
+                "randolph",
+                file(rcfg.genotypes),
+                file(rcfg.snp_positions)
+            ))
+        ).flatMap { dataset, beds, bims, fams ->
+            def bed_list = (beds instanceof List) ? beds : [beds]
+            bed_list.collect { bed ->
+                def base = bed.baseName.toString()
+                def m = (base =~ /chr(\d+)$/)
+                if (!m.find()) {
+                    error "Could not parse chromosome from Randolph bed: ${base}"
+                }
+                tuple(dataset, "chr${m.group(1)}", bed)
+            }
+        }
+        // Duplicate shared genotypes onto both condition strata.
+        randolph_geno_beds = randolph_geno_beds.flatMap { dataset, chr, bed ->
+            ["NI", "flu"].collect { cond -> tuple("${dataset}_${cond}", chr, bed) }
+        }
+
+        randolph_annot = CONVERT_RANDOLPH_ANNOT(
+            Channel.value(tuple("randolph", file(rcfg.gene_positions)))
+        ).flatMap { dataset, bed ->
+            ["NI", "flu"].collect { cond -> tuple("${dataset}_${cond}", bed) }
+        }
+    }
+
+    ids = EXTRACT_INDIV_IDS(
+        ds_meta.filter { dataset, _ -> dataset != 'tremor' && !is_randolph_dataset(dataset) }
+    )
     cluster_sizes = COMPUTE_CLUSTER_SIZES(ds_meta.filter { dataset, _ -> dataset == 'onek1k' })
+
+    dataset_qc = SUMMARISE_DATASET_QC(ds_meta)
     filt_vcf_files = FILTER_VCF(
-        vcf_files.filter { dataset, chr, vcf -> dataset != 'tremor' }.combine(ids, by: 0)
+        vcf_files
+            .filter { dataset, chr, vcf -> dataset != 'tremor' && !is_randolph_dataset(dataset) }
+            .combine(ids, by: 0)
     )
     bed_files = CONVERT_VCF_TO_BED(filt_vcf_files)
         .map { dataset, chr, bed, bim, fam -> tuple(dataset, chr, bed) }
@@ -151,6 +227,7 @@ workflow {
                     .combine(tremor_sample_map, by: 0)
             ).map { dataset, chr, bed, bim, fam -> tuple(dataset, chr, bed) }
         )
+        .mix(randolph_geno_beds)
     pruned_snps = PRUNE_SNPS(bed_files)
     all_bed = CONCAT_BED_FILES(
         bed_files.map { dataset, chr, bed -> tuple(dataset, bed) }.groupTuple()
@@ -159,16 +236,27 @@ workflow {
     grm = CREATE_GRM(all_bed)
     anno_bed = CREATE_ANNOT_BED(
         channel.fromList(
-            active_configs.collect { name, dcfg -> tuple(name, dcfg.annot_bed_url) }
+            active_configs
+                .findAll { name, dcfg -> name != "randolph" }
+                .collect { name, dcfg -> tuple(name, dcfg.annot_bed_url) }
         )
-    )
+    ).mix(randolph_annot)
 
     // Per-dataset cell_infos; info.dataset is set on every info map.
     cell_infos = channel.empty()
-    active_configs.each { name, dcfg ->
+    stratum_configs.each { name, dcfg ->
         def ds_infos = channel.fromList(dcfg.cell_types)
             .flatMap { ct ->
-                def info = [dataset: name, cell_type: ct.toString(), cell_frac: 1.0d, indiv_frac: 1.0d, n_cells_target: -1, count_frac: 1.0d]
+                def info = [
+                    dataset: name,
+                    cell_type: ct.toString(),
+                    cell_frac: 1.0d,
+                    indiv_frac: 1.0d,
+                    n_cells_target: -1,
+                    count_frac: 1.0d,
+                    condition: dcfg.condition,
+                    parent_dataset: dcfg.parent_dataset,
+                ]
                 def combos = []
                 if (info.cell_type in dcfg.subsample_cell_types) {
                     def cell_fracs = [0.005d, 0.01d, 0.05d, 0.1d, 0.25d, 0.5d, 1.0d]
@@ -209,7 +297,16 @@ workflow {
             ds_infos = ds_infos.mix(
                 channel.fromList(
                     dcfg.combined_types.collect { cname, members ->
-                        [dataset: name, cell_type: cname, cell_frac: 1.0d, indiv_frac: 1.0d, n_cells_target: -1, count_frac: 1.0d]
+                        [
+                            dataset: name,
+                            cell_type: cname,
+                            cell_frac: 1.0d,
+                            indiv_frac: 1.0d,
+                            n_cells_target: -1,
+                            count_frac: 1.0d,
+                            condition: dcfg.condition,
+                            parent_dataset: dcfg.parent_dataset,
+                        ]
                     }
                 )
             )
@@ -238,15 +335,6 @@ workflow {
             .combine(anno_bed, by: 0)
             .map { dataset, info, scf, anno -> tuple(info, scf, anno) }
     )
-    gene_properties_plot = gene_properties.filter { info, rest -> info.is_full_data }
-    gene_properties_file = Channel
-        .of("dataset\tcell_type\tproperties_file")
-        .concat(gene_properties_plot
-            .map { info, properties_file->
-                "${info.dataset}\t${info.cell_type}\t${properties_file}"
-            }
-        )
-        .collectFile(name: 'gene_properties_file', newLine: true, sort: false)
 
     sc_input = sc_input.combine(gene_properties, by: 0)
     pb_counts = COMPUTE_PB_COUNTS(sc_input)
@@ -284,8 +372,12 @@ workflow {
     )
     sc_pheno = sc_counts.mix(sc_logcounts).mix(sc_sct_counts)
 
-    pb_expr_covs = COMPUTE_PB_EXPR_COVS(sc_input)
-    sc_expr_covs = COMPUTE_SC_EXPR_COVS(sc_input)
+    pb_expr_covs = COMPUTE_PB_EXPR_COVS(
+        sc_input.filter { !is_randolph_dataset(it[0].dataset) }
+    )
+    sc_expr_covs = COMPUTE_SC_EXPR_COVS(
+        sc_input.filter { !is_randolph_dataset(it[0].dataset) }
+    )
     starcat_ref = DOWNLOAD_STARCAT_REF(params.starcat_ref_url)
     starcat_covs = COMPUTE_STARCAT_COVS(
         sc_input.filter {it[0].cell_type in ["T_all"]}
@@ -364,12 +456,28 @@ workflow {
     // saigeqtl_file = CONCAT_SAIGEQTL_TSVS(saigeqtl_output.map{it[1]}.collect())
 
     // Run pseudobulk quasar.
-    pb_covs = COMBINE_PB_COVS(
+    pb_covs_standard = COMBINE_PB_COVS(
         pb_expr_covs
             .map { info, covs -> tuple(info.dataset, info, covs) }
             .combine(geno_pcs, by: 0)
             .map { dataset, info, covs, pcs -> tuple(info, covs, pcs) }
     )
+
+    def randolph_meta = wants_randolph ? file(params.dataset_configs.randolph.metadata) : null
+    def randolph_ctc = wants_randolph ? file(params.dataset_configs.randolph.ctc_metadata) : null
+    randolph_pb_covs = Channel.empty()
+    if (wants_randolph) {
+        randolph_pb_covs = BUILD_RANDOLPH_COVS(
+            pb_logcounts
+                .filter { _t, info, _p -> is_randolph_dataset(info.dataset) }
+                .map { _t, info, pheno_file -> tuple(info.dataset, info, pheno_file) }
+                .combine(geno_pcs, by: 0)
+                .map { _ds, info, pheno_file, pcs ->
+                    tuple(info, pheno_file, pcs, randolph_meta, randolph_ctc)
+                }
+        )
+    }
+    pb_covs = pb_covs_standard.mix(randolph_pb_covs)
     tremor_tqtl_covs = BUILD_TREMOR_TQTL_COVS(
         pb_tmm_int
             .map { _t, info, pheno -> tuple(info.dataset, info, pheno) }
@@ -431,11 +539,17 @@ workflow {
                 && it[0].count_frac != 1.0d)
         })
         .filter({ !(it[0].cell_type in ["B_all", "T_all"]) })
-        // TEMP: tremor PB lm on tmm_int (TensorQTL-matched).
-        .filter { it[0].dataset == "tremor"
-               && it[0].model == "lm"
-               && it[0].int_cov == "none"
-               && it[0].pb_type == "tmm_int" }
+        // TEMP gates: tremor TensorQTL-matched PB; Randolph paper-matched logcount LM.
+        .filter {
+            (it[0].dataset == "tremor"
+                && it[0].model == "lm"
+                && it[0].int_cov == "none"
+                && it[0].pb_type == "tmm_int")
+            || (is_randolph_dataset(it[0].dataset)
+                && it[0].model == "lm"
+                && it[0].int_cov == "none"
+                && it[0].pb_type == "logcounts")
+        }
 
     // Swap TensorQTL-matched covs onto tmm_int runs.
     pb_quasar_branched = pb_quasar_input.branch {
@@ -542,6 +656,21 @@ workflow {
             .map { dataset, info, pb_c, sc_c, pcs -> tuple(info, pb_c, sc_c, pcs) }
     )
 
+    randolph_sc_covs = Channel.empty()
+    if (wants_randolph) {
+        randolph_sc_covs = EXPAND_RANDOLPH_SC_COVS(
+            randolph_pb_covs
+                .map { info, covs -> tuple([info.dataset, info.cell_type], info, covs) }
+                .combine(
+                    sc_logcounts.map { _t, info, pheno ->
+                        tuple([info.dataset, info.cell_type], pheno)
+                    },
+                    by: 0
+                )
+                .map { _k, info, covs, pheno -> tuple(info, covs, pheno) }
+        ).map { info, covs -> tuple(info, "bulk_pca", covs) }
+    }
+
     starcat_cov_names = [
         "starcat_Cytotoxic",
         "starcat_TEMRA",
@@ -568,7 +697,7 @@ workflow {
         .map { info, cov -> tuple(info.cell_type, info, cov) }
         .combine(int_cov_specs, by: 0)
         .map { cell_type, info, cov, cov_spec -> tuple(info, cov, cov_spec) }
-    sc_covs = FILTER_COVS(base_cov_pairs.mix(int_cov_pairs))
+    sc_covs = FILTER_COVS(base_cov_pairs.mix(int_cov_pairs)).mix(randolph_sc_covs)
 
     // TEMP: CASTIE on T_all counts with starcat_CD4_Naive only.
     castie_pheno = sc_counts
@@ -752,10 +881,12 @@ workflow {
         .filter({ !is_starcat_int_cov(it[0].int_cov) || it[0].k == "none" || it[0].int_cov == "starcat_CD4_Naive" })
         .filter { it[0].model != "lmm_sc"
                || (it[0].dataset in ["onek1k", "tremor"]
-                   && it[0].k == "none") }
-        // Tremor SC mapping uses configured cell types (e.g. Bergmann);
+                   && it[0].k == "none")
+               || (is_randolph_dataset(it[0].dataset) && it[0].k == "none") }
+        // Tremor/Randolph SC mapping use configured cell types;
         // onek1k SC quasar remains limited to combined types for now.
         .filter { it[0].dataset == "tremor"
+               || is_randolph_dataset(it[0].dataset)
                || it[0].cell_type in ["B_all", "T_all"] }
         .filter { it[0].data_type != "sct_counts"
                || (it[0].cell_type == "B_all"
@@ -793,11 +924,19 @@ workflow {
                    && it[0].indiv_frac == 1.0d
                    && it[0].n_cells_target < 0
                    && it[0].count_frac != 1.0d) }
-        // TEMP: only tremor SC quasar (onek1k SC still gated off here).
-        .filter { it[0].dataset == "tremor"
-               && it[0].k == "none"
-               && it[0].int_cov == "none"
-               && it[0].cov_spec == "bulk_pca" }
+        // TEMP: tremor or Randolph SC quasar (onek1k SC still gated off here).
+        .filter {
+            (it[0].dataset == "tremor"
+                && it[0].k == "none"
+                && it[0].int_cov == "none"
+                && it[0].cov_spec == "bulk_pca")
+            || (is_randolph_dataset(it[0].dataset)
+                && ((it[0].model == "lmm_sc" && it[0].data_type == "log_counts")
+                    || (it[0].model == "p_glmm_sc" && it[0].data_type == "counts"))
+                && it[0].k == "none"
+                && it[0].int_cov == "none"
+                && it[0].cov_spec == "bulk_pca")
+        }
 
     sc_quasar = RUN_QUASAR_SC(sc_quasar_input_full)
     sc_quasar = Utils.attachGeneProperties(sc_quasar, gene_properties)
@@ -885,59 +1024,6 @@ workflow {
 
     csaqtl_quasar = RUN_CSAQTL_GWAS(csaqtl_quasar_input)
 
-    // Plotting output (int figures currently disabled; extracts need gene/SNP list TSVs).
-    // sc_logcounts = EXTRACT_SC_LOGCOUNTS(sc_preprocess_input.filter { it[0].is_full_data })
-    // genotype_dosages = EXTRACT_GENOTYPES(all_bed)
-    //
-    // sc_logcounts_for_figures = sc_logcounts
-    //     .map { info, logcounts -> tuple([info.dataset, info.cell_type], logcounts) }
-    // sc_int_figures_input = sc_expr_aug
-    //     .filter { it[0].cell_type == "B_all" }
-    //     .map { info, covs -> tuple([info.dataset, info.cell_type], info, covs) }
-    //     .combine(sc_logcounts_for_figures, by: 0)
-    //     .map { key, info, covs, logcounts -> tuple(info.dataset, info, covs, logcounts) }
-    //     .combine(genotype_dosages, by: 0)
-    //     .map { dataset, info, covs, logcounts, geno ->
-    //         tuple(info, covs, logcounts, geno)
-    //     }
-
-    pb_quasar_file = Channel
-        .of("dataset\tmodel\tcell_type\tchr\tcell_frac\tindiv_frac\tn_cells_target\tcount_frac\tint_cov\tpb_type\tregion_file\tvariant_file\ttime_file\tpower_file\tconv_file\tgene_prop_file")
-        .concat(pb_quasar
-            .map { info, region_file, variant_file, time_file, gene_prop_file, power_file, conv_file  ->
-                "${info.dataset}\t${info.model}\t${info.cell_type}\t${info.chr}\t${info.cell_frac}\t${info.indiv_frac}\t${info.n_cells_target}\t${info.count_frac}\t${info.int_cov}\t${info.pb_type}\t${region_file}\t${variant_file}\t${time_file}\t${power_file}\t${conv_file}\t${gene_prop_file}"
-            }
-        )
-        .collectFile(name: 'pb_quasar_file', newLine: true, sort: false)
-    
-    sc_quasar_file = Channel
-        .of("dataset\tmodel\tdata_type\tcell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tn_cells_target\tcount_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tpower_file\tconv_file\tgene_prop_file")
-        .concat(sc_quasar
-            .map { info, region_file, variant_file, time_file, gene_prop_file, power_file, conv_file ->
-                "${info.dataset}\t${info.model}\t${info.data_type}\t${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.n_cells_target}\t${info.count_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${power_file}\t${conv_file}\t${gene_prop_file}"
-            }
-        )
-        .collectFile(name: 'sc_quasar_file', newLine: true, sort: false)
-
-    sc_offset_quasar_file = Channel
-        .of("dataset\tmodel\tcell_type\tchr\tcov_spec\toffset_spec\tregion_file\tvariant_file\ttime_file\tpower_file\tgene_prop_file")
-        .concat(sc_offset_quasar
-            .map { info, region_file, variant_file, time_file, gene_prop_file, power_file ->
-                "${info.dataset}\t${info.model}\t${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.offset_spec}\t${region_file}\t${variant_file}\t${time_file}\t${power_file}\t${gene_prop_file}"
-            }
-        )
-        .collectFile(name: 'sc_offset_quasar_file', newLine: true, sort: false)
-
-    seacells_file = Channel
-        .of("dataset\tcell_type\tgroups_file\tinfo_file")
-        .concat(seacells_groups
-            .combine(seacells_out.sizes, by: 0)
-            .map { info, cg, sizes ->
-                "${info.dataset}\t${info.cell_type}\t${cg}\t${sizes}"
-            }
-        )
-        .collectFile(name: 'seacells_file', newLine: true, sort: false)
-
   
     sc_quasar_gwas = Channel.empty()
 
@@ -952,51 +1038,6 @@ workflow {
 
     pb_quasar_gwas = RUN_QUASAR_PB_GWAS(pb_quasar_gwas_input)
 
-    sc_quasar_gwas_file = Channel
-        .of("dataset\tcell_type\tgeno_chr\tpheno_chr\tsig_variant_file\ttime_file\tn_variants")
-        .concat(sc_quasar_gwas
-            .map { info, sig_variant_file, time_file, n_variants_file ->
-                "${info.dataset}\t${info.cell_type}\t${info.chr}\tchr${info.pheno_chr}\t${sig_variant_file}\t${time_file}\t${n_variants_file}"
-            }
-        )
-        .collectFile(name: 'sc_quasar_gwas_file', newLine: true, sort: false)
-
-    pb_quasar_gwas_file = Channel
-        .of("dataset\tcell_type\tmodel\tgeno_chr\tpheno_chr\tsig_variant_file\ttime_file\tn_variants")
-        .concat(pb_quasar_gwas
-            .map { info, sig_variant_file, time_file, n_variants_file ->
-                "${info.dataset}\t${info.cell_type}\t${info.model}\t${info.chr}\tchr${info.pheno_chr}\t${sig_variant_file}\t${time_file}\t${n_variants_file}"
-            }
-        )
-        .collectFile(name: 'pb_quasar_gwas_file', newLine: true, sort: false)
-
-    csaqtl_quasar_file = Channel
-        .of("dataset\tcell_type\tgrouping\tgeno_chr\tsig_variant_file\ttime_file\tn_variants")
-        .concat(csaqtl_quasar
-            .map { info, sig_variant_file, time_file, n_variants_file ->
-                "${info.dataset}\t${info.cell_type}\t${info.grouping}\t${info.chr}\t${sig_variant_file}\t${time_file}\t${n_variants_file}"
-            }
-        )
-        .collectFile(name: 'csaqtl_quasar_file',newLine: true, sort: false)
-
-    pc_gwas_file = Channel
-        .of("dataset\tcell_type\tmodel\tsig_variant_file\ttime_file\tn_variants")
-        .concat(pc_gwas
-            .map { info, sig_variant_file, time_file, n_variants_file ->
-                "${info.dataset}\t${info.cell_type}\t${info.model}\t${sig_variant_file}\t${time_file}\t${n_variants_file}"
-            }
-        )
-        .collectFile(name: 'pc_gwas_file', newLine: true, sort: false)
-
-    pc_sc_gwas_file = Channel
-        .of("dataset\tcell_type\tmodel\tsig_variant_file\ttime_file\tn_variants")
-        .concat(pc_sc_gwas
-            .map { info, sig_variant_file, time_file, n_variants_file ->
-                "${info.dataset}\t${info.cell_type}\t${info.model}\t${sig_variant_file}\t${time_file}\t${n_variants_file}"
-            }
-        )
-        .collectFile(name: 'pc_sc_gwas_file', newLine: true, sort: false)
-
     // Genotype permutation analysis.
     rep_bed_files = bed_files
       .combine(channel.of(1..10))
@@ -1007,46 +1048,54 @@ workflow {
       .filter { it[0].cov_spec == "bulk_pca" || int_cov_for_cov_spec.containsKey(it[0].cov_spec) }
       .filter( { is_int_sc_cov(it[0].int_cov) } )
       .filter( {it[0].k in ["none", 5]})
-      // Tremor: main-effect SC genotype perms. OneK1K: keep T_all starcat int perms.
+      // Tremor/Randolph: main-effect SC genotype perms. OneK1K: keep T_all starcat int perms.
       .filter {
           (it[0].dataset == "tremor"
               && it[0].int_cov == "none"
               && it[0].k == "none"
               && it[0].cov_spec == "bulk_pca")
+          || (is_randolph_dataset(it[0].dataset)
+              && it[0].int_cov == "none"
+              && it[0].k == "none"
+              && it[0].cov_spec == "bulk_pca"
+              && it[0].data_type in ["log_counts", "counts"])
           || (it[0].cell_type == "T_all"
               && it[0].int_cov in ["starcat_all", "starcat_CD4_Naive"])
       }
       // No permutations on the CD4_NC joint cell × individual grid (keep full data only).
       .filter( { !is_joint_both_frac(it[0]) || it[0].is_full_data } )
       .map { info, sc_pheno, covs, anno, bed, cg ->
-        tuple([info.dataset, info.chr], info, sc_pheno, covs, anno, bed, cg)
-       }
-      .combine(permute_bed_files.map { ds, chr, pb -> tuple([ds, chr], pb) }, by: 0)
-      .map { key, info, sc_pheno, covs, anno, bed, cg, perm_bed ->
-        tuple(info, sc_pheno, covs, anno, perm_bed, cg)
+          tuple(info.dataset, info.chr, info, sc_pheno, covs, anno, bed, cg)
+      }
+      .combine(permute_bed_files, by: [0, 1])
+      .map { _dataset, _chr, info, sc_pheno, covs, anno, _bed, cg, perm_bed ->
+          tuple(info, sc_pheno, covs, anno, perm_bed, cg)
       }
     
     perm_sc_quasar = RUN_QUASAR_SC_PERM(perm_sc_quasar_input)
     perm_sc_quasar_filt = FILTER_VARIANTS_SC(Utils.combineWithPrunedSnps(perm_sc_quasar, pruned_snps))
     perm_sc_quasar_filt = Utils.attachGeneProperties(perm_sc_quasar_filt, gene_properties)
 
-    rep_bed_files_pb = bed_files
-      .combine(channel.of(1..5))
+    rep_bed_files_pb = bed_files.flatMap { dataset, chr, bed ->
+        def nrep = is_randolph_dataset(dataset) ? 10 : 5
+        (1..nrep).collect { rep -> tuple(dataset, chr, bed, rep) }
+    }
     permute_bed_files_pb = PERMUTE_BED_PB(rep_bed_files_pb)
 
     perm_pb_quasar_input = pb_quasar_input
       .filter { it[0].is_full_data }
       .filter { it[0].model == "lm" }
       .filter { it[0].int_cov == "none" }
-      .filter { it[0].dataset == "tremor" }
-      // No permutations on the CD4_NC joint cell × individual grid (keep full data only).
+      .filter {
+          it[0].dataset == "tremor" || is_randolph_dataset(it[0].dataset)
+      }
       .filter { !is_joint_both_frac(it[0]) || it[0].is_full_data }
       .map { info, pheno, covs, bed, grm ->
-        tuple([info.dataset, info.chr], info, pheno, covs, bed, grm)
-       }
-      .combine(permute_bed_files_pb.map { ds, chr, pb -> tuple([ds, chr], pb) }, by: 0)
-      .map { key, info, pheno, covs, bed, grm, perm_bed ->
-        tuple(info, pheno, covs, perm_bed, grm)
+          tuple(info.dataset, info.chr, info, pheno, covs, bed, grm)
+      }
+      .combine(permute_bed_files_pb, by: [0, 1])
+      .map { _dataset, _chr, info, pheno, covs, _bed, grm, perm_bed ->
+          tuple(info, pheno, covs, perm_bed, grm)
       }
 
     perm_pb_quasar = RUN_QUASAR_PB_PERM(perm_pb_quasar_input)
@@ -1095,24 +1144,6 @@ workflow {
     // sc_quasar_gwas_perm = RUN_QUASAR_SC_GWAS_PERM(sc_quasar_gwas_perm_input)
     sc_quasar_gwas_perm = Channel.empty()
 
-    sc_quasar_gwas_perm_file = Channel
-        .of("dataset\tcell_type\tgeno_chr\tpheno_chr\tsig_variant_file\ttime_file\tn_variants")
-        .concat(sc_quasar_gwas_perm
-            .map { info, sig_variant_file, time_file, n_variants_file ->
-                "${info.dataset}\t${info.cell_type}\t${info.chr}\tchr${info.pheno_chr}\t${sig_variant_file}\t${time_file}\t${n_variants_file}"
-            }
-        )
-        .collectFile(name: 'sc_quasar_gwas_perm_file', newLine: true, sort: false)
-
-    pb_quasar_gwas_perm_file = Channel
-        .of("dataset\tcell_type\tmodel\tgeno_chr\tpheno_chr\tsig_variant_file\ttime_file\tn_variants")
-        .concat(pb_quasar_gwas_perm
-            .map { info, sig_variant_file, time_file, n_variants_file ->
-                "${info.dadtaset}\t${info.cell_type}\t${info.model}\t${info.chr}\tchr${info.pheno_chr}\t${sig_variant_file}\t${time_file}\t${n_variants_file}"
-            }
-        )
-        .collectFile(name: 'pb_quasar_gwas_perm_file', newLine: true, sort: false)
-
     // Permutations under an interaction null.
     rep_pb_cov_files = pb_covs
       .filter({it[0].is_full_data})
@@ -1139,15 +1170,6 @@ workflow {
     perm_int_pb_quasar = RUN_QUASAR_PB_PERM_INT(perm_int_pb_quasar_input)
     perm_int_pb_quasar_filt = FILTER_VARIANTS_PB_INT(Utils.combineWithPrunedSnps(perm_int_pb_quasar, pruned_snps))
     perm_int_pb_quasar_filt = Utils.attachGeneProperties(perm_int_pb_quasar_filt, gene_properties)
-
-    perm_int_pb_quasar_file = Channel
-        .of("dataset\tcell_type\tmodel\tchr\tcell_frac\tindiv_frac\tint_cov\tpb_type\tregion_file\tvariant_file\ttime_file\tprop_file")
-        .concat(perm_int_pb_quasar_filt
-            .map { info, region_file, variant_file, time_file, prop_file ->
-                "${info.dataset}\t${info.cell_type}\t${info.model}\t${info.chr}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${info.pb_type}\t${region_file}\t${variant_file}\t${time_file}\t${prop_file}"
-            }
-        )
-        .collectFile(name: 'pb_quasar_perm_int_file', newLine: true, sort: false)
 
     rep_sc_cov_files = sc_covs
       .filter { info, cov_spec, cov ->
@@ -1176,15 +1198,6 @@ workflow {
     perm_int_sc_quasar_filt = FILTER_VARIANTS_SC_INT(Utils.combineWithPrunedSnps(perm_int_sc_quasar, pruned_snps))
     perm_int_sc_quasar_filt = Utils.attachGeneProperties(perm_int_sc_quasar_filt, gene_properties)
 
-    sc_quasar_perm_int_file = Channel
-        .of("dataset\tmodel\tcell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tprop_file")
-        .concat(perm_int_sc_quasar_filt
-            .map { info, region_file, variant_file, time_file, prop_file ->
-                "${info.dataset}\t${info.model}\t${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${prop_file}"
-            }
-        )
-        .collectFile(name: 'sc_quasar_perm_int_file', newLine: true, sort: false)
-
     rep_sc_cov_files_within = sc_covs
       .filter { info, cov_spec, cov ->
           int_cov_for_cov_spec.containsKey(cov_spec) && !is_starcat_int_cov(int_cov_for_cov_spec[cov_spec])
@@ -1211,15 +1224,6 @@ workflow {
     perm_int_sc_quasar_within = RUN_QUASAR_SC_PERM_WITHIN_INT(perm_int_sc_quasar_within_input)
     perm_int_sc_quasar_within_filt = FILTER_VARIANTS_SC_INT_WITHIN(Utils.combineWithPrunedSnps(perm_int_sc_quasar_within, pruned_snps))
     perm_int_sc_quasar_within_filt = Utils.attachGeneProperties(perm_int_sc_quasar_within_filt, gene_properties)
-
-    sc_quasar_perm_int_within_file = Channel
-        .of("dataset\tmodel\tcell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tprop_file")
-        .concat(perm_int_sc_quasar_within_filt
-            .map { info, region_file, variant_file, time_file, prop_file ->
-                "${info.dataset}\t${info.model}\t${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${prop_file}"
-            }
-        )
-        .collectFile(name: 'sc_quasar_perm_int_within_file', newLine: true, sort: false)
 
     // Shuffle the interaction covariate within log-library-size bins so that
     // depth-associated pseudotime structure is preserved.
@@ -1271,142 +1275,51 @@ workflow {
     perm_int_sc_quasar_logcount_filt = FILTER_VARIANTS_SC_INT_LOGCOUNT(Utils.combineWithPrunedSnps(perm_int_sc_quasar_logcount, pruned_snps))
     perm_int_sc_quasar_logcount_filt = Utils.attachGeneProperties(perm_int_sc_quasar_logcount_filt, gene_properties)
 
-    sc_quasar_perm_int_logcount_file = Channel
-        .of("dataset\tmodel\tdata_type\tcell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tprop_file")
-        .concat(perm_int_sc_quasar_logcount_filt
-            .map { info, region_file, variant_file, time_file, prop_file ->
-                "${info.dataset}\t${info.model}\t${info.data_type}\t${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${prop_file}"
-            }
-        )
-        .collectFile(name: 'sc_quasar_perm_int_logcount_file', newLine: true, sort: false)
+    COLLECT_MANIFESTS(
+        gene_properties,
+        pb_quasar,
+        sc_quasar,
+        sc_offset_quasar,
+        seacells_groups,
+        seacells_out.sizes,
+        sc_quasar_gwas,
+        pb_quasar_gwas,
+        csaqtl_quasar,
+        pc_gwas,
+        pc_sc_gwas,
+        sc_quasar_gwas_perm,
+        pb_quasar_gwas_perm,
+        perm_int_pb_quasar_filt,
+        perm_int_sc_quasar_filt,
+        perm_int_sc_quasar_within_filt,
+        perm_int_sc_quasar_logcount_filt,
+        perm_sc_quasar_filt,
+        perm_pb_quasar_filt
+    )
 
-    perm_sc_quasar_file = Channel
-        .of("dataset\tmodel\tcell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tcount_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tprop_file")
-        .concat(perm_sc_quasar_filt
-            .map { info, region_file, variant_file, time_file, prop_file ->
-                "${info.dataset}\t${info.model}\t${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.count_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${prop_file}"
-            }
-        )
-        .collectFile(name: 'sc_quasar_perm_file', newLine: true, sort: false)
-
-    perm_pb_quasar_file = Channel
-        .of("dataset\tcell_type\tmodel\tchr\tcell_frac\tindiv_frac\tcount_frac\tint_cov\tpb_type\tregion_file\tvariant_file\ttime_file\tprop_file")
-        .concat(perm_pb_quasar_filt
-            .map { info, region_file, variant_file, time_file, prop_file ->
-                "${info.dataset}\t${info.cell_type}\t${info.model}\t${info.chr}\t${info.cell_frac}\t${info.indiv_frac}\t${info.count_frac}\t${info.int_cov}\t${info.pb_type}\t${region_file}\t${variant_file}\t${time_file}\t${prop_file}"
-            }
-        )
-        .collectFile(name: 'pb_quasar_perm_file', newLine: true, sort: false)
-
-    // Analysis.
-    //PLOT_CLUMPED(clumped_pb_quasar_file, clumped_sc_quasar_file)
-    //PLOT_POWER(pb_quasar_file, sc_quasar_file, saigeqtl_file)
-    //PLOT_POWER_N_CELLS_FILTER(pb_quasar_file, sc_quasar_file)
-    //PLOT_POWER_OFFSET(sc_offset_quasar_file)
-    //unique_egenes_tsv = PLOT_UNIQUE_SC_EGENES(pb_quasar_file, sc_quasar_file)
-    //PLOT_EGENE_SIG_MODEL(pb_quasar_file, sc_quasar_file)
-    //PLOT_POWER_CELL_FRAC(pb_quasar_file, sc_quasar_file)
-    // TEMP: disabled with joint downsampling
-    //PLOT_POWER_BOTH_FRAC(pb_quasar_file, sc_quasar_file)
-    //PLOT_POWER_COUNT_FRAC(pb_quasar_file, sc_quasar_file)
-    //PLOT_POWER_INDIV_FRAC(pb_quasar_file, sc_quasar_file)
-    //PLOT_POWER_GENE_PROP(pb_quasar_file, sc_quasar_file)
-    //PLOT_METHOD_SCATTER(pb_quasar_file, sc_quasar_file)
-
-    //unique_genotype_dosages = EXTRACT_GENOTYPES(
-    //    all_bed.combine(unique_egenes_tsv)
-    //)
-    //unique_sc_logcounts = EXTRACT_SC_LOGCOUNTS(
-    //   sc_preprocess_input
-    //        .filter { it[0].is_full_data && it[0].cell_type in ["Plasma", "B_IN", "CD4_NC"] }
-    //       .combine(unique_egenes_tsv)
-    //)
-    //unique_sc_egene_figures_input = unique_sc_logcounts
-    //    .map { info, logcounts -> tuple(info.dataset, info, logcounts) }
-    //    .combine(unique_genotype_dosages, by: 0)
-    //    .combine(unique_egenes_tsv)
-    //    .map { dataset, info, logcounts, geno, leads ->
-    //        tuple(info, leads, logcounts, geno)
-    //    }
-    //PLOT_UNIQUE_SC_EGENE_FIGURES(unique_sc_egene_figures_input)
-
-    //unique_pb_egenes_tsv = PLOT_UNIQUE_PB_EGENES(pb_quasar_file, sc_quasar_file)
-    //unique_pb_genotype_dosages = EXTRACT_GENOTYPES_PB_UNIQUE(
-    //    all_bed.combine(unique_pb_egenes_tsv)
-    //)
-    //unique_pb_sc_logcounts = EXTRACT_SC_LOGCOUNTS_PB_UNIQUE(
-    //    sc_preprocess_input
-    //        .filter { it[0].is_full_data && it[0].cell_type in ["Plasma", "B_IN", "CD4_NC"] }
-    //        .combine(unique_pb_egenes_tsv)
-    //)
-    //unique_pb_egene_figures_input = unique_pb_sc_logcounts
-    //    .map { info, logcounts -> tuple(info.dataset, info, logcounts) }
-    //    .combine(unique_pb_genotype_dosages, by: 0)
-    //    .combine(unique_pb_egenes_tsv)
-    //    .map { dataset, info, logcounts, geno, leads ->
-    //        tuple(info, leads, logcounts, geno)
-    //    }
-    //PLOT_UNIQUE_PB_EGENE_FIGURES(unique_pb_egene_figures_input)
-    //PLOT_POWER_COVS(sc_quasar_file)
-    //PLOT_CONVERGENCE(pb_quasar_file, sc_quasar_file, saigeqtl_file)
-    PLOT_PERM(perm_sc_quasar_file)
-    //PLOT_PERM_CELL_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
-    //PLOT_PERM_COUNT_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
-    PLOT_PERM_PB(perm_pb_quasar_file)
-    if ("tremor" in active_datasets) {
-        tremor_plot_files = tremor_tensorqtl_compare
-            .map { dataset, cell_type, sample, summary -> tuple(sample, summary) }
-            .toList()
-            .filter { it.size() > 0 }
-            .map { pairs ->
-                tuple(
-                    pairs.collect { it[0] },
-                    pairs.collect { it[1] }
-                )
-            }
-        PLOT_TREMOR_TENSORQTL(
-            tremor_plot_files.map { samples, summaries -> samples },
-            tremor_plot_files.map { samples, summaries -> summaries }
-        )
-    }
-    //PLOT_PERM_GLOBAL(perm_pb_quasar_file)
-    //PLOT_PERM_GWAS(sc_quasar_gwas_perm_file, pb_quasar_gwas_perm_file)
-    //PLOT_PERM_INT(perm_int_pb_quasar_file)
-    //PLOT_INT_OUTPUT(pb_quasar_file)
-    //PLOT_SC_INT_OUTPUT(sc_quasar_file, castie_file)
-    //PLOT_QUASAR_SC_INT_OUTPUT(sc_quasar_file)
-    //PLOT_GROUPED_SC_OUTPUT(sc_quasar_file)
-    //PLOT_GROUPED_INT_TIME(sc_quasar_file)
-    //PLOT_GROUPED_VS_INT(sc_quasar_file, castie_file)
-    //PLOT_SC_PGLMM_VS_LMM(sc_quasar_file)
-    //PLOT_PERM_SC_GROUPED(perm_sc_quasar_file)
-    //PLOT_PERM_SC_INT_GLOBAL(perm_sc_quasar_file)
-    //PLOT_PERM_SC_INT(sc_quasar_perm_int_file)
-    //PLOT_SC_INT_FIGURES(sc_int_figures_input)
-    //PLOT_METACELL_OUTPUT(sc_quasar_file, seacells_file)
-    //PLOT_CSAQTL_OUTPUT(csaqtl_quasar_file)
-    //PLOT_PC_GWAS_OUTPUT(pc_gwas_file, pc_sc_gwas_file)so
-    //PLOT_PERM_SC_INT_WITHIN(sc_quasar_perm_int_within_file)
-    //PLOT_PERM_SC_INT_LOGCOUNT_BINS(sc_quasar_perm_int_logcount_file)
-    //PLOT_TIME(pb_quasar_file, sc_quasar_file, saigeqtl_file)
-    //PLOT_CELLS_PER_INDIV(
-    //    cluster_sizes.map { dataset, sizes, cells_per_indiv -> cells_per_indiv }
-    //)
-    //PLOT_PC_GWAS_COMPARISON(pc_gwas_file, pc_sc_gwas_file)
-    //PLOT_CONCORDANCE(pb_quasar_file, sc_quasar_file, saigeqtl_file)
-    //PLOT_GENE_PROPERTIES(gene_properties_file)
-    //PLOT_GWAS_OUTPUT(sc_quasar_gwas_file, pb_quasar_gwas_file)
-    //PLOT_PVALUE_SCATTER(pb_quasar_file, sc_quasar_file)
-    //PLOT_ZSCORE_SCATTER(pb_quasar_file, sc_quasar_file, saigeqtl_file)
-    //PLOT_MAIN_VS_INT(sc_quasar_file)
-    //PLOT_INT_TIME(sc_quasar_file, castie_file)
-    //PLOT_QUASAR_INT_TIME(sc_quasar_file)
-    //RUN_COLOC(sc_quasar_file)
-
-    // Create example data for quasar.
-    //example_data_input = sc_quasar_input
-    //    .filter({it[0].cell_type == "B_IN"})
-    //    .filter({it[0].indiv_frac == 1.0d && it[0].cell_frac == 1.0d})
-    //    .filter({it[0].chr == "chr22"})
-    //CREATE_EXAMPLE_DATA(example_data_input)
+    RUN_PLOTS(
+        COLLECT_MANIFESTS.out.gene_properties_file,
+        COLLECT_MANIFESTS.out.pb_quasar_file,
+        COLLECT_MANIFESTS.out.sc_quasar_file,
+        COLLECT_MANIFESTS.out.sc_offset_quasar_file,
+        COLLECT_MANIFESTS.out.seacells_file,
+        COLLECT_MANIFESTS.out.sc_quasar_gwas_file,
+        COLLECT_MANIFESTS.out.pb_quasar_gwas_file,
+        COLLECT_MANIFESTS.out.csaqtl_quasar_file,
+        COLLECT_MANIFESTS.out.pc_gwas_file,
+        COLLECT_MANIFESTS.out.pc_sc_gwas_file,
+        COLLECT_MANIFESTS.out.sc_quasar_gwas_perm_file,
+        COLLECT_MANIFESTS.out.pb_quasar_gwas_perm_file,
+        COLLECT_MANIFESTS.out.perm_int_pb_quasar_file,
+        COLLECT_MANIFESTS.out.sc_quasar_perm_int_file,
+        COLLECT_MANIFESTS.out.sc_quasar_perm_int_within_file,
+        COLLECT_MANIFESTS.out.sc_quasar_perm_int_logcount_file,
+        COLLECT_MANIFESTS.out.perm_sc_quasar_file,
+        COLLECT_MANIFESTS.out.perm_pb_quasar_file,
+        saigeqtl_file,
+        cluster_sizes,
+        tremor_tensorqtl_compare,
+        dataset_qc,
+        active_datasets
+    )
 }

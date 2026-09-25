@@ -152,7 +152,7 @@ overall_plot_data <- sc_data_files |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
   filter(count_frac == 1) |>
-  summarise(file_list = list(variant_file), .by = c(cell_type, model)) |>
+  summarise(file_list = list(variant_file), .by = c(dataset, cell_type, model)) |>
   rowwise() |>
   mutate(qq_data = list(compute_qq_data(file_list))) |>
   ungroup() |>
@@ -183,7 +183,7 @@ overall_p <- overall_plot_data |>
     values = setNames(cell_type_cols, cell_type_lookup[names(cell_type_cols)]),
     drop = TRUE
   ) +
-  facet_grid(vars(model), vars(cell_type)) +
+  facet_grid(vars(dataset, model), vars(cell_type)) +
   labs(
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)",

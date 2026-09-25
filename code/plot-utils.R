@@ -86,7 +86,12 @@ cell_type_cols <- c(
   "Microglia" = "#4477AA",
   "Golgi" = "#EE6677",
   "UBC" = "#228833",
-  "Endocytes" = "#CCBB44"
+  "Endocytes" = "#CCBB44",
+  "B" = "#228833",
+  "CD4_T" = "#EE6677",
+  "CD8_T" = "#CC6677",
+  "monocytes_combined" = "#4477AA",
+  "NK_combined" = "#CCBB44"
 )
 
 cell_type_lookup <- c(
@@ -99,5 +104,10 @@ cell_type_lookup <- c(
     "Microglia" = "Microglia",
     "Golgi" = "Golgi",
     "UBC" = "UBC",
-    "Endocytes" = "Endocytes"
+    "Endocytes" = "Endocytes",
+    "B" = "B",
+    "CD4_T" = "CD4 T",
+    "CD8_T" = "CD8 T",
+    "monocytes_combined" = "Monocytes",
+    "NK_combined" = "NK"
 )

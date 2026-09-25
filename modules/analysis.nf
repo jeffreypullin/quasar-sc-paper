@@ -881,3 +881,19 @@ process PLOT_TREMOR_TENSORQTL {
     plot-tremor-tensorqtl.R $samples $summaries
     """
 }
+
+process PLOT_DATASET_QC {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        path cell_counts
+        path cells_per_indiv
+    output:
+        path("dataset-qc.pdf")
+
+    script:
+    """
+    plot-dataset-qc.R $cell_counts $cells_per_indiv
+    """
+}

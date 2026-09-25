@@ -73,7 +73,7 @@ pb_overall_plot_data <- pb_data_files |>
   summarise(
     file_list = list(variant_file),
     prop_file = first(prop_file),
-    .by = c(cell_type)
+    .by = c(dataset, cell_type)
   ) |>
   rowwise() |>
   mutate(qq_data = list(compute_qq_data_pb(file_list, prop_file))) |>
@@ -88,7 +88,7 @@ pb_overall_p <- pb_overall_plot_data |>
   geom_point(alpha = 0.8) +
   geom_abline(linetype = "dashed") +
   geom_ribbon(linetype = 2, alpha = 0.1) +
-  facet_wrap(~cell_type) +
+  facet_wrap(~dataset + cell_type) +
   labs(
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)",

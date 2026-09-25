@@ -1,0 +1,13 @@
+name: randolph-seurat
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base=4.3.3
+  - r-seurat=4.4.0
+  - r-seuratobject=4.1.*
+  - r-matrix
+  - r-data.table
+  - r-dplyr
+  - r-readr
+  - r-stringr

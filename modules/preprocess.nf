@@ -281,6 +281,21 @@ process COMPUTE_CLUSTER_SIZES{
     """
 }
 
+process SUMMARISE_DATASET_QC {
+    conda "$projectDir/envs/scanpy.yaml"
+    label "high_mem"
+
+    input: tuple val(dataset), val(raw_sc_data)
+    output: tuple val(dataset), path("${dataset}-cell-counts.tsv"), path("${dataset}-cells-per-indiv.tsv")
+
+    script:
+    """
+    summarise-dataset-qc.py "$dataset" "$raw_sc_data"
+    mv cell-counts.tsv "${dataset}-cell-counts.tsv"
+    mv cells-per-indiv.tsv "${dataset}-cells-per-indiv.tsv"
+    """
+}
+
 process COMPUTE_PB_EXPR_COVS{
     conda "$projectDir/envs/scanpy.yaml"
     label "high_mem"

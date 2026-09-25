@@ -18,13 +18,10 @@ class Utils {
     static combineWithPrunedSnps(ch, pruned_snps) {
         ch
             .map { info, region_file, variant_file, time_file ->
-                [[info.dataset, info.chr], info, region_file, variant_file, time_file]
+                [info.dataset, info.chr, info, region_file, variant_file, time_file]
             }
-            .combine(
-                pruned_snps.map { dataset, chr, prune_in -> [[dataset, chr], prune_in] },
-                by: 0
-            )
-            .map { key, info, region_file, variant_file, time_file, prune_in ->
+            .combine(pruned_snps, by: [0, 1])
+            .map { _dataset, _chr, info, region_file, variant_file, time_file, prune_in ->
                 [info, region_file, variant_file, time_file, prune_in]
             }
     }
