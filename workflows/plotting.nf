@@ -16,7 +16,7 @@ include {
     PLOT_METACELL_OUTPUT ; PLOT_CSAQTL_OUTPUT ; PLOT_PC_GWAS_OUTPUT ;
     PLOT_PC_GWAS_COMPARISON ; RUN_COLOC ; PLOT_CELLS_PER_INDIV ;
     PLOT_POWER_N_CELLS_FILTER ; PLOT_POWER_OFFSET ; PLOT_ZSCORE_SCATTER ;
-    PLOT_TREMOR_TENSORQTL ; PLOT_DATASET_QC
+    PLOT_TREMOR_TENSORQTL ; PLOT_TREMOR_PERM_NZ_FRAC ; PLOT_DATASET_QC
 } from '../modules/analysis'
 
 workflow RUN_PLOTS {
@@ -100,8 +100,8 @@ workflow RUN_PLOTS {
     // PLOT_CONVERGENCE(pb_quasar_file, sc_quasar_file, saigeqtl_file)
     PLOT_PERM(perm_sc_quasar_file)
     // PLOT_PERM_CELL_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
-    // PLOT_PERM_COUNT_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
-    PLOT_PERM_PB(perm_pb_quasar_file)
+    //PLOT_PERM_COUNT_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
+    //PLOT_PERM_PB(perm_pb_quasar_file)
 
     if ("tremor" in active_datasets) {
         tremor_plot_files = tremor_tensorqtl_compare
@@ -118,6 +118,7 @@ workflow RUN_PLOTS {
             tremor_plot_files.map { samples, summaries -> samples },
             tremor_plot_files.map { samples, summaries -> summaries }
         )
+        PLOT_TREMOR_PERM_NZ_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
     }
 
     qc_files = dataset_qc

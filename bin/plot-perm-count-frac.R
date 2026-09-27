@@ -18,7 +18,7 @@ sc_data_files <- read_tsv(args[1], show_col_types = FALSE)
 pb_data_files <- read_tsv(args[2], show_col_types = FALSE)
 
 cell_types <- c("Plasma", "B_IN", "CD4_NC")
-models <- c("lm", "nb_glm", "p_glmm_sc", "lmm_sc")
+models <- c("lm", "p_glmm_sc", "lmm_sc")
 
 compute_qq_data <- function(files) {
   pvalue <- unlist(map(

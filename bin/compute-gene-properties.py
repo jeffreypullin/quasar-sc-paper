@@ -75,13 +75,6 @@ if cell_frac != 1.0:
         subset, cell_frac, seed_key=cell_label, individual_col="individual", copy=True
     )
 
-subset = binomial_downsample_counts(
-    subset,
-    count_frac,
-    seed_key=cell_label,
-    copy=True,
-)
-
 if subset.n_obs == 0:
     raise ValueError(
         "No cells found for cell_label="
@@ -89,6 +82,16 @@ if subset.n_obs == 0:
         f"cell_frac={cell_frac}, indiv_frac={indiv_frac}, "
         f"n_cells_target={n_cells_target}, count_frac={count_frac}"
     )
+
+# Expression before count thinning — used to fix the gene set across count_frac.
+_, _, _, sc_non_zero_frac_pre_count = compute_gene_stats(subset.X)
+
+subset = binomial_downsample_counts(
+    subset,
+    count_frac,
+    seed_key=cell_label,
+    copy=True,
+)
 
 sc_mean, sc_var, sc_cv, sc_non_zero_frac = compute_gene_stats(subset.X)
 
@@ -112,6 +115,7 @@ df = pd.DataFrame(
         "sc_var": sc_var,
         "sc_cv": sc_cv,
         "sc_non_zero_frac": sc_non_zero_frac,
+        "sc_non_zero_frac_pre_count": sc_non_zero_frac_pre_count,
         "pb_mean": pb_mean,
         "pb_var": pb_var,
         "pb_cv": pb_cv,

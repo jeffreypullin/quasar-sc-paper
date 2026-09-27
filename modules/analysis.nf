@@ -193,7 +193,6 @@ process PLOT_PERM_COUNT_FRAC {
         val perm_pb_quasar_file
     output:
         tuple path("perm-count-frac-lm-plot.pdf"),
-              path("perm-count-frac-nb_glm-plot.pdf"),
               path("perm-count-frac-p_glmm_sc-plot.pdf"),
               path("perm-count-frac-lmm_sc-plot.pdf")
 
@@ -894,6 +893,24 @@ process PLOT_TREMOR_TENSORQTL {
     script:
     """
     plot-tremor-tensorqtl.R $samples $summaries
+    """
+}
+
+process PLOT_TREMOR_PERM_NZ_FRAC {
+    label "high_mem"
+    publishDir "output"
+
+    input:
+        val perm_sc_quasar_file
+        val perm_pb_quasar_file
+    output:
+        tuple path("tremor-perm-nz-frac-lm-plot.pdf"),
+              path("tremor-perm-nz-frac-p_glmm_sc-plot.pdf"),
+              path("tremor-perm-nz-frac-lmm_sc-plot.pdf")
+
+    script:
+    """
+    plot-tremor-perm-nz-frac.R $perm_sc_quasar_file $perm_pb_quasar_file
     """
 }
 

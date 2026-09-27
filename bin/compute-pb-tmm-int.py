@@ -27,7 +27,7 @@ n_cells_target = int(sys.argv[6])
 count_frac = float(sys.argv[7]) if len(sys.argv) > 7 else 1.0
 
 keep_genes = gene_prop_data.loc[
-    gene_prop_data["sc_non_zero_frac"] > 0.01, "feature_id"
+    gene_prop_data["sc_non_zero_frac_pre_count"] > 0.01, "feature_id"
 ].values
 adata_rows = adata[
     cell_label_mask(adata.obs["cell_label"], cell_label).to_numpy()

@@ -326,8 +326,14 @@ workflow {
         info + [is_full_data: is_full_data]
     }
 
-    // TEMP: disable joint and other downsampling — keep full data only.
-    cell_infos = cell_infos.filter { it.is_full_data }
+    // TEMP: disable joint and other downsampling — keep full data + count-frac series.
+    cell_infos = cell_infos.filter {
+        it.is_full_data ||
+        (it.cell_frac == 1.0d
+            && it.indiv_frac == 1.0d
+            && it.n_cells_target < 0
+            && it.count_frac != 1.0d)
+    }
 
     // Pair each info with its dataset's h5ad.
     sc_input = cell_infos
@@ -545,9 +551,13 @@ workflow {
                 && it[0].count_frac != 1.0d)
         })
         .filter({ !(it[0].cell_type in ["B_all", "T_all"]) })
-        // TEMP gates: tremor TensorQTL-matched PB; Randolph paper-matched logcount LM.
+        // TEMP gates: OneK1K / Randolph logcount LM; tremor TensorQTL-matched TMM+INT.
         .filter {
-            (it[0].dataset == "tremor"
+            (it[0].dataset == "onek1k"
+                && it[0].model == "lm"
+                && it[0].int_cov == "none"
+                && it[0].pb_type == "logcounts")
+            || (it[0].dataset == "tremor"
                 && it[0].model == "lm"
                 && it[0].int_cov == "none"
                 && it[0].pb_type == "tmm_int")
@@ -890,10 +900,18 @@ workflow {
                    && it[0].k == "none")
                || (is_randolph_dataset(it[0].dataset) && it[0].k == "none") }
         // Tremor/Randolph SC mapping use configured cell types;
-        // onek1k SC quasar remains limited to combined types for now.
+        // onek1k SC quasar remains limited to combined types, plus the
+        // count-frac series on Plasma / B_IN / CD4_NC.
         .filter { it[0].dataset == "tremor"
                || is_randolph_dataset(it[0].dataset)
-               || it[0].cell_type in ["B_all", "T_all"] }
+               || it[0].cell_type in ["B_all", "T_all"]
+               || (it[0].model in ["p_glmm_sc", "lmm_sc"]
+                   && it[0].cell_type in ["Plasma", "B_IN", "CD4_NC"]
+                   && it[0].k == "none"
+                   && it[0].int_cov == "none"
+                   && it[0].cell_frac == 1.0d
+                   && it[0].indiv_frac == 1.0d
+                   && it[0].n_cells_target < 0) }
         .filter { it[0].data_type != "sct_counts"
                || (it[0].cell_type == "B_all"
                    && it[0].int_cov in ["none", "pseudotime"]
@@ -930,7 +948,8 @@ workflow {
                    && it[0].indiv_frac == 1.0d
                    && it[0].n_cells_target < 0
                    && it[0].count_frac != 1.0d) }
-        // TEMP: tremor or Randolph SC quasar (onek1k SC still gated off here).
+        // TEMP: tremor / Randolph SC quasar, plus onek1k count-frac series
+        // (Plasma / B_IN / CD4_NC, including full-depth count_frac == 1).
         .filter {
             (it[0].dataset == "tremor"
                 && it[0].k == "none"
@@ -942,6 +961,15 @@ workflow {
                 && it[0].k == "none"
                 && it[0].int_cov == "none"
                 && it[0].cov_spec == "bulk_pca")
+            || (it[0].dataset == "onek1k"
+                && it[0].model in ["p_glmm_sc", "lmm_sc"]
+                && it[0].cell_type in ["Plasma", "B_IN", "CD4_NC"]
+                && it[0].k == "none"
+                && it[0].int_cov == "none"
+                && it[0].cov_spec == "bulk_pca"
+                && it[0].cell_frac == 1.0d
+                && it[0].indiv_frac == 1.0d
+                && it[0].n_cells_target < 0)
         }
 
     sc_quasar = RUN_QUASAR_SC(sc_quasar_input_full)
@@ -1054,7 +1082,7 @@ workflow {
       .filter { it[0].cov_spec == "bulk_pca" || int_cov_for_cov_spec.containsKey(it[0].cov_spec) }
       .filter( { is_int_sc_cov(it[0].int_cov) } )
       .filter( {it[0].k in ["none", 5]})
-      // Tremor/Randolph: main-effect SC genotype perms. OneK1K: keep T_all starcat int perms.
+      // Main-effect SC genotype perms, plus OneK1K T_all starcat int perms.
       .filter {
           (it[0].dataset == "tremor"
               && it[0].int_cov == "none"
@@ -1065,6 +1093,15 @@ workflow {
               && it[0].k == "none"
               && it[0].cov_spec == "bulk_pca"
               && it[0].data_type in ["log_counts", "counts"])
+          || (it[0].dataset == "onek1k"
+              && it[0].model in ["p_glmm_sc", "lmm_sc"]
+              && it[0].cell_type in ["Plasma", "B_IN", "CD4_NC"]
+              && it[0].int_cov == "none"
+              && it[0].k == "none"
+              && it[0].cov_spec == "bulk_pca"
+              && it[0].cell_frac == 1.0d
+              && it[0].indiv_frac == 1.0d
+              && it[0].n_cells_target < 0)
           || (it[0].cell_type == "T_all"
               && it[0].int_cov in ["starcat_all", "starcat_CD4_Naive"])
       }
@@ -1093,7 +1130,9 @@ workflow {
       .filter { it[0].model == "lm" }
       .filter { it[0].int_cov == "none" }
       .filter {
-          it[0].dataset == "tremor" || is_randolph_dataset(it[0].dataset)
+          it[0].dataset == "onek1k"
+              || it[0].dataset == "tremor"
+              || is_randolph_dataset(it[0].dataset)
       }
       .filter { !is_joint_both_frac(it[0]) || it[0].is_full_data }
       .map { info, pheno, covs, bed, grm ->
