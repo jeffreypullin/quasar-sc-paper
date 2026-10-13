@@ -7,16 +7,20 @@ suppressPackageStartupMessages({
   library(patchwork)
 })
 
+source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
+
 args <- commandArgs(trailingOnly = TRUE)
 
 sc_covs_file <- args[1]
 sc_logcounts_file <- args[2]
 genotype_file <- args[3]
+gene_id <- args[4]
+variant_id <- args[5]
+gene_symbol <- args[6]
+int_cov <- args[7]
 
-gene_id <- "ENSG00000143297"
-variant_id <- "1:157530620T-C"
-
-sc_covs <- read_tsv(sc_covs_file, show_col_types = FALSE)
+sc_covs <- read_tsv(sc_covs_file, show_col_types = FALSE) |>
+  mutate(pseudotime = .data[[int_cov]])
 sc_logcounts <- read_tsv(sc_logcounts_file, show_col_types = FALSE)
 genotypes <- read_tsv(genotype_file, show_col_types = FALSE)
 
@@ -50,7 +54,7 @@ p1 <- plot_df |>
     y = "log1p gene expression"
   ) +
   facet_wrap(~geno) +
-  theme_bw()
+  theme_jp()
 
 n_bins <- 5
 use_quantile <- TRUE
@@ -161,19 +165,18 @@ p2 <- bin_plot_df |>
   ) +
   geom_smooth(method = "lm", se = FALSE, linewidth = 1, colour = "black") +
   scale_x_continuous(breaks = sort(unique(bin_plot_df$dosage))) +
-  coord_cartesian(ylim = c(0, 0.75)) +
+  coord_cartesian(ylim = c(0, quantile(bin_plot_df$mean_expr, 0.99))) +
   facet_wrap(~pt_bin_label, nrow = 1) +
   labs(
+    title = sprintf("%s (%s)\n%s", gene_symbol, gene_id, variant_id),
     x = "Genotype dosage",
     y = "Mean log1p expression"
   ) +
-  theme_bw()
-
-fig_title <- sprintf("%s\n%s", gene_id, variant_id)
+  theme_jp()
 
 ggsave(
-  "sc-int-figures.pdf",
+  sprintf("sc-int-figure-%s.pdf", gene_symbol),
   p2,
   width = 14,
-  height = 14
+  height = 5
 )

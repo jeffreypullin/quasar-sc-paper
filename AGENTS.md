@@ -1,5 +1,12 @@
 # Agent instructions
 
+## Never empty a file
+
+Do not empty a file under any circumstances. Truncating, overwriting with nothing,
+or otherwise wiping a file's contents is never acceptable, including as a temporary
+step, a cleanup, or a way to "start fresh." Edit files in place and leave existing
+content intact unless the user has explicitly asked to delete specific content.
+
 ## Never run Nextflow
 
 Do not invoke `nextflow` in this repository under any circumstances. The user runs
@@ -60,4 +67,3 @@ When writing or editing R scripts in `bin/`:
   defensive checks, verbose error handling, and extra abstractions unless the
   pipeline step genuinely needs them. Trust that inputs come from upstream
   Nextflow processes in the expected shape.
-

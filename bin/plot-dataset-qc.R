@@ -24,6 +24,7 @@ label_dataset <- function(x) {
 
 count_files <- args[str_detect(basename(args), "cell-counts")]
 cells_files <- args[str_detect(basename(args), "cells-per-indiv")]
+zero_files <- args[str_detect(basename(args), "zero-frac")]
 
 cell_counts <- map_dfr(count_files, read_tsv, show_col_types = FALSE) |>
   mutate(dataset = label_dataset(dataset))
@@ -32,12 +33,13 @@ cells_per_indiv <- map_dfr(cells_files, read_tsv, show_col_types = FALSE) |>
   mutate(dataset = label_dataset(dataset)) |>
   summarise(n_cells = sum(n_cells), .by = c(dataset, individual))
 
+zero_frac <- map_dfr(zero_files, read_tsv, show_col_types = FALSE) |>
+  mutate(dataset = label_dataset(dataset))
+
+datasets <- unique(c(cell_counts$dataset, cells_per_indiv$dataset, zero_frac$dataset))
 dataset_levels <- c("OneK1K", "Tremor", "Randolph") |>
-  intersect(unique(c(cell_counts$dataset, cells_per_indiv$dataset)))
-dataset_levels <- c(
-  dataset_levels,
-  sort(setdiff(unique(c(cell_counts$dataset, cells_per_indiv$dataset)), dataset_levels))
-)
+  intersect(datasets)
+dataset_levels <- c(dataset_levels, sort(setdiff(datasets, dataset_levels)))
 dataset_cols <- setNames(
   rep(c("#009988", "#0077BB", "#EE7733", "#CC3311", "#33BBEE", "#AA4499"), length.out = length(dataset_levels)),
   dataset_levels
@@ -47,6 +49,8 @@ cell_counts <- cell_counts |>
   mutate(dataset = factor(dataset, levels = dataset_levels))
 cells_per_indiv <- cells_per_indiv |>
   mutate(dataset = factor(dataset, levels = dataset_levels))
+zero_frac <- zero_frac |>
+  mutate(dataset = factor(dataset, levels = dataset_levels))
 
 p_counts <- cell_counts |>
   ggplot(aes(log10(n_counts), colour = dataset, fill = dataset)) +
@@ -55,6 +59,18 @@ p_counts <- cell_counts |>
   scale_fill_manual(values = dataset_cols) +
   labs(
     x = expression(log[10]("UMI counts per cell")),
+    y = "Density"
+  ) +
+  theme_jp()
+
+p_zeros <- zero_frac |>
+  ggplot(aes(zero_frac, colour = dataset, fill = dataset)) +
+  geom_density(alpha = 0.2, linewidth = 0.8) +
+  scale_colour_manual(values = dataset_cols) +
+  scale_fill_manual(values = dataset_cols) +
+  scale_x_continuous(labels = scales::label_percent()) +
+  labs(
+    x = "Proportion of genes with zero counts",
     y = "Density"
   ) +
   theme_jp()
@@ -79,9 +95,9 @@ p_cells <- cells_per_indiv |>
 
 ggsave(
   "dataset-qc.pdf",
-  plot = p_counts + p_cells +
+  plot = p_counts + p_zeros + p_cells +
     plot_layout(guides = "collect") &
     theme(legend.position = "top"),
-  width = 12,
+  width = 16,
   height = 5
 )

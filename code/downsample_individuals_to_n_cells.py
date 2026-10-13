@@ -7,14 +7,34 @@ import numpy as np
 import pandas as pd
 
 
-def _parse_target(value) -> Optional[int]:
-    """Return None for unset targets (None or -1)."""
+# Targets at or above this value keep donors with at least
+# (target - offset) cells and do not downsample those donors' cells.
+# Smaller positive targets also downsample each donor to that exact count.
+DONOR_ONLY_OFFSET = 1_000_000
+
+
+def _parse_target(value) -> tuple[Optional[int], bool]:
+    """Return (min_cells, equalize).
+
+    None or a negative value leaves the data unchanged.
+    A positive value below DONOR_ONLY_OFFSET keeps donors with at least that
+    many cells and downsamples each of them to exactly that count.
+    A value of DONOR_ONLY_OFFSET + n keeps donors with at least n cells and
+    keeps every cell from those donors.
+    """
     if value is None:
-        return None
+        return None, False
     value = int(value)
     if value < 0:
-        return None
-    return value
+        return None, False
+    if value >= DONOR_ONLY_OFFSET:
+        min_cells = value - DONOR_ONLY_OFFSET
+        if min_cells <= 0:
+            raise ValueError(
+                "donor-only n_cells_target must be DONOR_ONLY_OFFSET + n with n > 0"
+            )
+        return min_cells, False
+    return value, True
 
 
 def downsample_individuals_to_n_cells(
@@ -30,9 +50,11 @@ def downsample_individuals_to_n_cells(
     to exactly `n_cells_target` cells.
 
     A target of None or -1 leaves `adata` unchanged (or returns a copy if
-    copy=True). Sampling is deterministic given `seed_key` and `n_cells_target`.
+    copy=True). A target of DONOR_ONLY_OFFSET + n keeps the same individuals
+    but all of their cells. Sampling is deterministic given `seed_key` and
+    `n_cells_target`.
     """
-    n_cells_target = _parse_target(n_cells_target)
+    n_cells_target, equalize = _parse_target(n_cells_target)
 
     if n_cells_target is None:
         return adata.copy() if copy else adata
@@ -68,8 +90,11 @@ def downsample_individuals_to_n_cells(
         if n < n_cells_target:
             continue
 
-        rng = np.random.default_rng(base_seed + i)
-        chosen_idx = rng.choice(indiv_idx, size=n_cells_target, replace=False)
+        if equalize:
+            rng = np.random.default_rng(base_seed + i)
+            chosen_idx = rng.choice(indiv_idx, size=n_cells_target, replace=False)
+        else:
+            chosen_idx = indiv_idx
         keep_idx_chunks.append(chosen_idx)
 
     if keep_idx_chunks:

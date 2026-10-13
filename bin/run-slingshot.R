@@ -25,7 +25,7 @@ gene_cols <- setdiff(colnames(dat), meta_cols)
 res_mat <- as.matrix(dat[, gene_cols, drop = FALSE])
 rownames(res_mat) <- cell_ids
 
-phate_op <- phate(res_mat, npca = n_pca)
+phate_op <- phate(res_mat, npca = n_pca, seed = 20261013)
 rd_mat <- phate_op$embedding
 colnames(rd_mat) <- paste0("PHATE_", seq_len(ncol(rd_mat)))
 rownames(rd_mat) <- cell_ids

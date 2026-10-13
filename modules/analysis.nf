@@ -23,7 +23,8 @@ process PLOT_POWER_QUASAR {
         val pb_quasar_file
         val sc_quasar_file
     output:
-        path "power-quasar-comparison-plot.pdf"
+        tuple path("power-quasar-comparison-plot.pdf"),
+              path("power-quasar-egene-pct-diff.csv")
 
     script:
     """
@@ -69,7 +70,9 @@ process PLOT_CELLS_PER_INDIV {
     input:
         path cells_per_indiv_file
     output:
-        path "cells-per-indiv-plot.pdf"
+        tuple path("cells-per-indiv-plot.pdf"),
+              path("cells-per-indiv-cv-plot.pdf"),
+              path("cells-per-indiv-cv.tsv")
 
     script:
     """
@@ -83,9 +86,9 @@ process PLOT_POWER_COVS {
     input:
         val sc_quasar_file
     output:
-        tuple path("power-cov-spec-plot.pdf"),
-              path("power-cov-spec-gene-plot.pdf"),
-              path("power-int-cov-plot.pdf")
+        path("power-cov-spec-plot.pdf")
+        path("power-sc-pca-plot.pdf")
+        path("power-int-cov-plot.pdf"), optional: true
 
     script:
     """
@@ -152,12 +155,12 @@ process PLOT_CONVERGENCE {
     """
 }
 
-process PLOT_PERM {
+process PLOT_PERM_SC {
     label "high_mem"
     publishDir "output"
 
     input: val perm_sc_quasar_file
-    output: path("perm-overall-plot.pdf")
+    output: path("perm-sc-p_glmm_sc-plot.pdf")
 
     script:
     """
@@ -173,10 +176,8 @@ process PLOT_PERM_CELL_FRAC {
         val perm_sc_quasar_file
         val perm_pb_quasar_file
     output:
-        tuple path("perm-cell-frac-lm-plot.pdf"),
-              path("perm-cell-frac-nb_glm-plot.pdf"),
-              path("perm-cell-frac-p_glmm_sc-plot.pdf"),
-              path("perm-cell-frac-lmm_sc-plot.pdf")
+        path("perm-cell-frac-lm-plot.pdf")
+        path("perm-cell-frac-p_glmm_sc-plot.pdf")
 
     script:
     """
@@ -193,12 +194,29 @@ process PLOT_PERM_COUNT_FRAC {
         val perm_pb_quasar_file
     output:
         tuple path("perm-count-frac-lm-plot.pdf"),
-              path("perm-count-frac-p_glmm_sc-plot.pdf"),
-              path("perm-count-frac-lmm_sc-plot.pdf")
+              path("perm-count-frac-p_glmm_sc-plot.pdf")
 
     script:
     """
     plot-perm-count-frac.R $perm_sc_quasar_file $perm_pb_quasar_file
+    """
+}
+
+process PLOT_PERM_DONOR_SUBSAMPLE {
+    label "high_mem"
+    publishDir "output"
+
+    input:
+        val perm_sc_quasar_file
+        val perm_pb_quasar_file
+        val sc_quasar_file
+        path cells_per_indiv_file
+    output:
+        path("perm-donor-subsample-plot.pdf")
+
+    script:
+    """
+    plot-perm-donor-subsample.R $perm_sc_quasar_file $perm_pb_quasar_file $sc_quasar_file $cells_per_indiv_file
     """
 }
 
@@ -207,12 +225,27 @@ process PLOT_PERM_PB {
     label "high_mem"
 
     input: val perm_pb_quasar_file
-    output: tuple path("perm-pb-overall-plot.pdf"),
-        path("perm-pb-cell-frac-plot.pdf")
+    output: path("perm-pb-*-plot.pdf")
 
      script:
     """
     plot-perm-pb.R $perm_pb_quasar_file
+    """
+}
+
+process PLOT_PROP_N_CELLS {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val perm_sc_quasar_file
+        path cells_per_indiv_file
+    output:
+        tuple path("prop-n-cells-plot.pdf"), path("prop-n-cells.tsv")
+
+    script:
+    """
+    plot-prop-n-cells.R $perm_sc_quasar_file $cells_per_indiv_file
     """
 }
 
@@ -276,7 +309,9 @@ process PLOT_PERM_SC_INT_GLOBAL {
     label "high_mem"
 
     input: val perm_sc_quasar_file
-    output: tuple path("perm-sc-int-global-plot.pdf"), path("perm-sc-int-global-main-plot.pdf")
+    output:
+    tuple path("perm-sc-int-global-plot.pdf"), path("perm-sc-int-global-main-plot.pdf")
+    path "perm-sc-int-global-qq.rds", emit: qq
 
     script:
     """
@@ -289,7 +324,9 @@ process PLOT_PERM_SC_INT {
     label "high_mem"
 
     input: val perm_sc_quasar_file
-    output: tuple path("perm-sc-int-plot.pdf"), path("perm-sc-int-main-plot.pdf")
+    output:
+    tuple path("perm-sc-int-plot.pdf"), path("perm-sc-int-main-plot.pdf")
+    path "perm-sc-int-qq.rds", emit: qq
 
     script:
     """
@@ -302,7 +339,9 @@ process PLOT_PERM_SC_INT_WITHIN {
     label "high_mem"
 
     input: val perm_sc_quasar_file
-    output: tuple path("perm-sc-int-within-plot.pdf"), path("perm-sc-int-within-main-plot.pdf")
+    output:
+    tuple path("perm-sc-int-within-plot.pdf"), path("perm-sc-int-within-main-plot.pdf")
+    path "perm-sc-int-within-qq.rds", emit: qq
 
     script:
     """
@@ -321,6 +360,19 @@ process PLOT_PERM_SC_INT_LOGCOUNT_BINS {
     script:
     """
     plot-perm-sc-int-logcount-bins.R $perm_sc_quasar_file
+    """
+}
+
+process PLOT_PERM_SC_ALL {
+    publishDir "output"
+    label "high_mem"
+
+    input: path qq_rds_files
+    output: tuple path("perm-sc-all-int-plot.pdf"), path("perm-sc-all-main-plot.pdf")
+
+    script:
+    """
+    plot-perm-sc-all.R $qq_rds_files
     """
 }
 
@@ -361,7 +413,6 @@ process PLOT_GROUPED_VS_INT {
         val sc_quasar_file
         val castie_file
     output: tuple path("grouped-vs-int-scatter-plot.pdf"),
-                 path("grouped-vs-int-upset-plot.pdf"),
                  path("grouped-vs-int-upset-genes.tsv")
 
     script:
@@ -395,15 +446,31 @@ process PLOT_SC_PGLMM_VS_LMM {
     """
 }
 
-process PLOT_SC_INT_FIGURES {
+process PLOT_ABLATE_DONOR_TOTALS {
+    label "high_mem"
     publishDir "output"
 
-    input: tuple val(info), path(sc_covs), path(sc_logcounts), path(genotype_dosages)
-    output: path("sc-int-figures.pdf")
+    input: val sc_quasar_file
+    output: tuple path("ablate-donor-totals-plot.pdf"),
+                  path("ablate-donor-totals-time-plot.pdf"),
+                  path("ablate-donor-totals-na-plot.pdf")
 
     script:
     """
-    plot-sc-int-figures.R "$sc_covs" "$sc_logcounts" "$genotype_dosages"
+    plot-ablate-donor-totals.R $sc_quasar_file
+    """
+}
+
+process PLOT_SC_INT_FIGURES {
+    publishDir "output"
+
+    input: tuple val(info), val(example), path(sc_covs), path(sc_logcounts), path(genotype_dosages)
+    output: path("sc-int-figure-${example.gene_symbol}.pdf")
+
+    script:
+    """
+    plot-sc-int-figures.R "$sc_covs" "$sc_logcounts" "$genotype_dosages" \\
+        "${example.feature_id}" "${example.snp_id}" "${example.gene_symbol}" "${example.int_cov}"
     """
 }
 
@@ -429,11 +496,12 @@ process PLOT_SC_INT_OUTPUT {
     input:
         val sc_quasar_file
         val castie_file
+        path gene_map
     output: path("sc-int-eqtl-hits.tsv")
 
     script:
     """
-    plot-sc-int-output.R $sc_quasar_file $castie_file
+    plot-sc-int-output.R $gene_map $sc_quasar_file $castie_file
     """
 }
 
@@ -441,12 +509,14 @@ process PLOT_QUASAR_SC_INT_OUTPUT {
     label "high_mem"
     publishDir "output"
 
-    input: val sc_quasar_file
+    input:
+      val sc_quasar_file
+      path gene_map
     output: path("quasar-sc-int-eqtl-hits.tsv")
 
     script:
     """
-    plot-sc-int-output.R $sc_quasar_file
+    plot-sc-int-output.R $gene_map $sc_quasar_file
     mv sc-int-eqtl-hits.tsv quasar-sc-int-eqtl-hits.tsv
     """
 }
@@ -585,7 +655,9 @@ process PLOT_INT_TIME {
     input:
         val sc_quasar_file
         val castie_file
-    output: path("time-int-plot.pdf")
+    output:
+        path("time-int-plot.pdf")
+        path("time-int-castie-plot.pdf")
 
     script:
     """
@@ -598,29 +670,45 @@ process PLOT_QUASAR_INT_TIME {
     label "high_mem"
 
     input: val sc_quasar_file
-    output: path("time-int-plot.pdf")
+    output: path("quasar-time-int-plot.pdf")
 
     script:
     """
     plot-int-time.R $sc_quasar_file
+    mv time-int-plot.pdf quasar-time-int-plot.pdf
     """
 }
 
 process PLOT_TIME {
     publishDir "output"
 
-    input: 
+    input:
         val pb_quasar_file
         val sc_quasar_file
         val saigeqtl_file
-    output: tuple path("time-quasar-plot.pdf"), 
+    output: tuple path("time-quasar-plot.pdf"),
         path("time-method-comparison-plot.pdf"),
         path("time-frac-plot.pdf")
 
     script:
     """
     plot-time.R $pb_quasar_file $sc_quasar_file $saigeqtl_file
-    """ 
+    """
+}
+
+process PLOT_TIME_QUASAR {
+    publishDir "output"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        path "time-quasar-plot.pdf"
+
+    script:
+    """
+    plot-time-quasar.R $pb_quasar_file $sc_quasar_file
+    """
 }
 
 process PLOT_CONCORDANCE {
@@ -732,6 +820,52 @@ process PLOT_POWER_CELL_FRAC {
     script:
     """
     plot-power-cell-frac.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_CELL_SUBSAMPLE_TIME {
+    publishDir "output"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        path("time-cell-subsample-plot.pdf")
+
+    script:
+    """
+    plot-cell-subsample-time.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_DONOR_SUBSAMPLE_TIME {
+    publishDir "output"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        path("time-donor-subsample-plot.pdf")
+
+    script:
+    """
+    plot-donor-subsample-time.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_TIME_NCELLS_SCATTER {
+    publishDir "output"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+        path cluster_sizes_file
+    output:
+        path("time-ncells-scatter-plot.pdf")
+
+    script:
+    """
+    plot-time-ncells-scatter.R $pb_quasar_file $sc_quasar_file $cluster_sizes_file
     """
 }
 
@@ -896,6 +1030,21 @@ process PLOT_TREMOR_TENSORQTL {
     """
 }
 
+process PLOT_TREMOR_POWER_QUASAR {
+    publishDir "output"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        path "tremor-power-quasar-comparison-plot.pdf"
+
+    script:
+    """
+    plot-tremor-power-quasar.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
 process PLOT_TREMOR_PERM_NZ_FRAC {
     label "high_mem"
     publishDir "output"
@@ -921,11 +1070,29 @@ process PLOT_DATASET_QC {
     input:
         path cell_counts
         path cells_per_indiv
+        path zero_frac
     output:
         path("dataset-qc.pdf")
 
     script:
     """
-    plot-dataset-qc.R $cell_counts $cells_per_indiv
+    plot-dataset-qc.R $cell_counts $cells_per_indiv $zero_frac
+    """
+}
+
+process PLOT_MAF {
+    publishDir "output"
+    label "mega_mem"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+    output:
+        tuple path("maf-plot.pdf"),
+              path("maf-leads.tsv")
+
+    script:
+    """
+    plot-maf.R $pb_quasar_file $sc_quasar_file
     """
 }

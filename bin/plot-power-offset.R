@@ -60,7 +60,7 @@ p_variant <- variant_plot_data |>
   geom_col() +
   scale_fill_manual(values = offset_col_lookup, drop = FALSE) +
   facet_wrap(~cell_type_lookup[cell_type], ncol = 1, scales = "free_x") +
-  labs(y = "Number of significant variants", x = NULL, fill = "Offset") +
+  labs(y = "Number of significant variants", x = "Offset", fill = "Offset") +
   coord_flip() +
   theme_jp_vgrid() +
   guides(fill = "none")
@@ -70,14 +70,14 @@ p_gene <- gene_plot_data |>
   geom_col() +
   scale_fill_manual(values = offset_col_lookup, drop = FALSE) +
   facet_wrap(~cell_type_lookup[cell_type], ncol = 1, scales = "free_x") +
-  labs(y = "Number of significant genes", x = NULL, fill = "Offset") +
+  labs(y = "Number of significant genes", x = "Offset", fill = "Offset") +
   coord_flip() +
   theme_jp_vgrid() +
   guides(fill = "none")
 
 ggsave(
   "power-offset-plot.pdf",
-  plot = p_variant + p_gene & theme(axis.text = element_text(size = 18)),
+  plot = p_variant + p_gene,
   width = 16,
   height = 8
 )
@@ -102,16 +102,21 @@ paired_data <- gene_data |>
     abs_diff = abs(alt_score - percell_score)
   )
 
-p_scatter <- paired_data |>
-  ggplot(aes(percell_score, alt_score)) +
-  geom_abline(slope = 1, intercept = 0, colour = "#cbcbcb", linewidth = 1) +
-  geom_point(alpha = 0.3, size = 1.5) +
-  facet_grid(cell_type_lookup[cell_type] ~ comparison_label) +
-  labs(
-    x = expression(-log[10] ~ "p, per-cell offset"),
-    y = expression(-log[10] ~ "p, alternative offset")
-  ) +
-  theme_jp()
+p_scatter <- names(comparison_lookup) |>
+  map(\(spec) {
+    paired_data |>
+      filter(comparison == spec) |>
+      ggplot(aes(percell_score, alt_score)) +
+      geom_abline(slope = 1, intercept = 0, colour = "#cbcbcb", linewidth = 1) +
+      geom_point(alpha = 0.3, size = 1.5) +
+      facet_wrap(~cell_type_lookup[cell_type], ncol = 1) +
+      labs(
+        x = bquote(-log[10] ~ "p," ~ .(offset_lookup[["percell"]])),
+        y = bquote(-log[10] ~ "p," ~ .(offset_lookup[[spec]]))
+      ) +
+      theme_jp()
+  }) |>
+  wrap_plots(nrow = 1)
 
 ggsave("power-offset-scatter-plot.pdf", plot = p_scatter, width = 14, height = 8)
 

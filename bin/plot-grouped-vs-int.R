@@ -6,7 +6,6 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(purrr)
   library(tidyr)
-  library(ggupset)
 })
 
 source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
@@ -22,22 +21,18 @@ neg_log10_p <- function(p) {
 }
 
 analysis_levels <- c("P-GLMM", "CASTIE", "Linear grouped")
-comparison_levels <- c("P-GLMM vs CASTIE", "P-GLMM vs grouped")
-comparison_cols <- c(
-  "P-GLMM vs CASTIE" = unname(method_col_lookup[["CASTIE"]]),
-  "P-GLMM vs grouped" = unname(method_col_lookup[["Single-cell P-GLMM"]])
-)
 
 read_region_pvalues <- function(manifest, pval_col) {
   rows <- list()
   for (i in seq_len(nrow(manifest))) {
     info <- manifest[i, ]
     region <- read_tsv(info$region_file, show_col_types = FALSE)
-    if (!pval_col %in% names(region)) {
+    col <- gsub("{int_cov}", info$int_cov, pval_col, fixed = TRUE)
+    if (!col %in% names(region)) {
       next
     }
     rows[[i]] <- region |>
-      select(feature_id, pvalue = all_of(pval_col)) |>
+      select(feature_id, pvalue = all_of(col)) |>
       filter(!is.na(feature_id), is.finite(pvalue), pvalue > 0, pvalue <= 1) |>
       mutate(
         cell_type = info$cell_type,
@@ -146,7 +141,7 @@ if (nrow(int_manifest) == 0L || nrow(grouped_manifest) == 0L) {
   stop("Need both P-GLMM interaction (k == none) and grouped (k != none) runs.")
 }
 
-pglmm_genes <- read_region_pvalues(int_manifest, "int_acat_pvalue") |>
+pglmm_genes <- read_region_pvalues(int_manifest, "int_{int_cov}_acat_pvalue") |>
   mutate(data_type = ifelse(is.na(data_type) | data_type == "", "counts", data_type)) |>
   collapse_genes() |>
   add_bh() |>
@@ -163,7 +158,7 @@ castie_genes <- read_castie_pvalues(castie_manifest) |>
   mutate(analysis = "CASTIE")
 
 if (nrow(pglmm_genes) == 0L) {
-  stop("No int_acat_pvalue values found in P-GLMM interaction region files.")
+  stop("No int_<int_cov>_acat_pvalue values found in P-GLMM interaction region files.")
 }
 if (nrow(linear_genes) == 0L) {
   stop("No group_linear_acat_pvalue values found in grouped region files.")
@@ -172,62 +167,55 @@ if (nrow(castie_genes) == 0L) {
   stop("No CASTIE interaction eGene p-values found.")
 }
 
-join_comparison <- function(other_genes, comparison) {
-  inner_join(
-    pglmm_genes |>
-      select(cell_type, int_cov, data_type, feature_id, pglmm_pvalue = pvalue),
-    other_genes |>
-      select(cell_type, int_cov, data_type, feature_id, other_pvalue = pvalue),
-    by = c("cell_type", "int_cov", "data_type", "feature_id")
-  ) |>
-    mutate(comparison = comparison)
-}
-
-plot_data <- bind_rows(
-  join_comparison(castie_genes, "P-GLMM vs CASTIE"),
-  join_comparison(linear_genes, "P-GLMM vs grouped")
+plot_data <- inner_join(
+  pglmm_genes |>
+    select(cell_type, int_cov, data_type, feature_id, pglmm_pvalue = pvalue),
+  linear_genes |>
+    select(cell_type, int_cov, data_type, feature_id, grouped_pvalue = pvalue),
+  by = c("cell_type", "int_cov", "data_type", "feature_id")
 ) |>
   mutate(
-    comparison = factor(comparison, levels = comparison_levels),
     panel = panel_label(cell_type, int_cov, data_type),
     neg_log10_pglmm = neg_log10_p(pglmm_pvalue),
-    neg_log10_other = neg_log10_p(other_pvalue)
+    neg_log10_grouped = neg_log10_p(grouped_pvalue)
   )
 
 if (nrow(plot_data) == 0L) {
-  stop("No overlapping genes between P-GLMM and CASTIE or grouped analyses.")
+  stop("No overlapping genes between P-GLMM and grouped analyses.")
 }
 
 model_summary <- plot_data |>
   summarise(
     n_genes = n(),
-    spearman = cor(pglmm_pvalue, other_pvalue, method = "spearman"),
-    .by = c(comparison, panel)
+    spearman = cor(pglmm_pvalue, grouped_pvalue, method = "spearman"),
+    .by = panel
   ) |>
-  arrange(comparison, panel) |>
+  arrange(panel) |>
   mutate(
     label = paste0(
-      comparison, "\n", panel, "\n",
+      panel, "\n",
       format(n_genes, big.mark = ","), " genes; ",
       "Spearman rho = ", sprintf("%.3f", spearman)
     )
   )
 
-print(model_summary |> select(comparison, panel, n_genes, spearman))
+print(model_summary |> select(panel, n_genes, spearman))
 
 scatter_data <- plot_data |>
-  left_join(select(model_summary, comparison, panel, label), by = c("comparison", "panel")) |>
+  left_join(select(model_summary, panel, label), by = "panel") |>
   mutate(label = factor(label, levels = model_summary$label))
 
 scatter_p <- scatter_data |>
-  ggplot(aes(x = neg_log10_pglmm, y = neg_log10_other, colour = comparison)) +
-  geom_point(alpha = 0.35, size = 0.7) +
+  ggplot(aes(x = neg_log10_pglmm, y = neg_log10_grouped)) +
+  geom_point(
+    colour = method_col_lookup[["Single-cell P-GLMM"]],
+    alpha = 0.35, size = 0.7
+  ) +
   geom_abline(slope = 1, intercept = 0, linetype = 2, linewidth = 0.3) +
   facet_wrap(vars(label)) +
-  scale_color_manual(values = comparison_cols, guide = "none") +
   labs(
-    x = expression(-log[10](P-GLMM~eGene~pvalue)),
-    y = expression(-log[10](comparison~eGene~pvalue))
+    x = expression(-log[10](P-GLMM~interaction~eGene~pvalue)),
+    y = expression(-log[10](Linear~grouped~eGene~pvalue))
   ) +
   theme_jp()
 
@@ -251,18 +239,6 @@ gene_calls <- bind_rows(pglmm_genes, castie_genes, linear_genes) |>
     analysis = factor(analysis, levels = analysis_levels),
     key = unname(analysis_keys[as.character(analysis)]),
     called = bh < 0.05
-  )
-
-sig_sets <- gene_calls |>
-  filter(called) |>
-  mutate(panel = panel_label(cell_type, int_cov, data_type)) |>
-  distinct(panel, analysis, feature_id)
-
-upset_df <- sig_sets |>
-  group_by(panel, feature_id) |>
-  summarise(
-    analyses = list(intersect(analysis_levels, as.character(unique(analysis)))),
-    .groups = "drop"
   )
 
 called_wide <- gene_calls |>
@@ -308,27 +284,3 @@ upset_genes <- called_wide |>
   )
 
 write_tsv(upset_genes, "grouped-vs-int-upset-genes.tsv")
-
-upset_p <- upset_df |>
-  ggplot(aes(x = analyses)) +
-  geom_bar() +
-  scale_x_upset() +
-  facet_wrap(vars(panel), scales = "free_y") +
-  labs(
-    x = NULL,
-    y = "Number of eGenes (BH < 0.05)"
-  ) +
-  theme_jp() +
-  theme(
-    axis.text.x = element_text(size = 10),
-    strip.text = element_text(size = 12)
-  )
-
-n_upset <- n_distinct(upset_df$panel)
-ggsave(
-  "grouped-vs-int-upset-plot.pdf",
-  upset_p,
-  width = max(8, 5 * min(n_upset, 3)),
-  height = 6 * ceiling(n_upset / min(n_upset, 3)),
-  limitsize = FALSE
-)

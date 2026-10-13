@@ -1,0 +1,4 @@
+dataset	cell_type	int_cov	feature_id	gene_symbol	snp_id
+onek1k	B_all	pseudotime	ENSG00000196735	HLA-DQA1	6:32608014T-C
+onek1k	B_all	pseudotime	ENSG00000090104	RGS1	1:192544795A-G
+onek1k	B_all	pseudotime	ENSG00000197728	RPS26	12:56435929C-G

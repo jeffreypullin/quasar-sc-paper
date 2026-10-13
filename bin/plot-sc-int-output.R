@@ -7,6 +7,8 @@ suppressPackageStartupMessages({
 })
 
 args <- commandArgs(trailingOnly = TRUE)
+gene_map <- read_tsv(args[[1]], show_col_types = FALSE) |>
+  distinct(feature_id, .keep_all = TRUE)
 
 to_snake <- function(x) {
   out <- tolower(x)
@@ -20,8 +22,11 @@ output_cols <- c(
   "cell_type",
   "model",
   "data_type",
+  "run_int_cov",
   "int_cov",
+  "k",
   "feature_id",
+  "gene_symbol",
   "snp_id",
   "snp_beta",
   "snp_se",
@@ -33,14 +38,17 @@ output_cols <- c(
   "int_acat_bh"
 )
 
-variant_cols <- setdiff(output_cols, c("int_acat_pvalue", "int_acat_bh"))
+variant_cols <- setdiff(output_cols, c("gene_symbol", "int_acat_pvalue", "int_acat_bh"))
 
 empty_hits <- tibble::tibble(
   cell_type = character(),
   model = character(),
   data_type = character(),
+  run_int_cov = character(),
   int_cov = character(),
+  k = character(),
   feature_id = character(),
+  gene_symbol = character(),
   snp_id = character(),
   snp_beta = double(),
   snp_se = double(),
@@ -60,13 +68,30 @@ read_file_list <- function(path) {
   if (!"data_type" %in% names(data)) {
     data$data_type <- NA_character_
   }
+  for (col in c("cell_frac", "indiv_frac", "count_frac")) {
+    if (!col %in% names(data)) {
+      data[[col]] <- 1
+    }
+  }
+  if (!"n_cells_target" %in% names(data)) {
+    data$n_cells_target <- -1
+  }
+  if (!"ablate" %in% names(data)) {
+    data$ablate <- "none"
+  }
   data |>
     mutate(
+      k = as.character(k),
       k = ifelse(is.na(k) | k == "", "none", k),
       data_type = ifelse(is.na(data_type) | data_type == "", NA_character_, data_type),
-      data_type = ifelse(is.na(data_type) & model == "castie", "counts", data_type)
+      data_type = ifelse(is.na(data_type) & model == "castie", "counts", data_type),
+      ablate = ifelse(is.na(ablate) | ablate == "", "none", ablate)
     ) |>
-    filter(k == "none", int_cov != "none")
+    filter(
+      k %in% c("none", "5"), int_cov != "none",
+      cell_frac == 1, indiv_frac == 1, count_frac == 1, n_cells_target < 0,
+      ablate == "none"
+    )
 }
 
 # Quasar region files use int_<cov>_acat_pvalue (or legacy int_acat_pvalue).
@@ -115,7 +140,10 @@ normalise_int_region <- function(dt, int_cov) {
   out
 }
 
-normalise_int_variants <- function(dt) {
+normalise_int_variants <- function(dt, int_cov) {
+  if (!"snp_beta" %in% names(dt) && all(c("beta", "se", "pvalue") %in% names(dt))) {
+    setnames(dt, c("beta", "se", "pvalue"), c("snp_beta", "snp_se", "snp_pvalue"))
+  }
   if ("MarkerID" %in% names(dt)) {
     gene_col <- if ("feature_id" %in% names(dt)) {
       "feature_id"
@@ -129,23 +157,24 @@ normalise_int_variants <- function(dt) {
     ge_p <- as.character(dt$pval_ge)
     ge_b <- as.character(dt$Beta_ge)
     ge_s <- as.character(dt$seBeta_ge)
+    int_prefix <- paste0("snp_x_", int_cov)
     dt[, `:=`(
       feature_id = as.character(get(gene_col)),
       snp_id = MarkerID,
       snp_beta = BETA,
       snp_se = SE,
-      snp_pvalue = `p.value`,
-      snp_x_pseudotime_pvalue = as.numeric(sub(",.*", "", ge_p)),
-      snp_x_pseudotime_beta = as.numeric(sub(",.*", "", ge_b)),
-      snp_x_pseudotime_se = as.numeric(sub(",.*", "", ge_s))
+      snp_pvalue = `p.value`
     )]
+    dt[, (paste0(int_prefix, "_pvalue")) := as.numeric(sub(",.*", "", ge_p))]
+    dt[, (paste0(int_prefix, "_beta")) := as.numeric(sub(",.*", "", ge_b))]
+    dt[, (paste0(int_prefix, "_se")) := as.numeric(sub(",.*", "", ge_s))]
   }
   dt
 }
 
-sc_data_files <- read_file_list(args[[1]])
-if (length(args) >= 2) {
-  sc_data_files <- bind_rows(sc_data_files, read_file_list(args[[2]]))
+sc_data_files <- read_file_list(args[[2]])
+if (length(args) >= 3) {
+  sc_data_files <- bind_rows(sc_data_files, read_file_list(args[[3]]))
 }
 
 if (nrow(sc_data_files) == 0) {
@@ -157,17 +186,28 @@ region_list <- list()
 for (i in seq_len(nrow(sc_data_files))) {
   info <- sc_data_files[i, ]
   region_data <- fread(info$region_file, showProgress = FALSE)
-  region_data <- normalise_int_region(region_data, info$int_cov)
+  # Binned runs have no interaction term; the linear trend across bins plays its role.
+  region_data <- if (info$k == "none") {
+    normalise_int_region(region_data, info$int_cov)
+  } else {
+    region_data[!is.na(group_linear_acat_pvalue), .(
+      feature_id = as.character(feature_id),
+      int_cov = info$int_cov,
+      int_acat_pvalue = group_linear_acat_pvalue
+    )]
+  }
   if (is.null(region_data)) {
     next
   }
   region_data[, `:=`(
     cell_type = info$cell_type,
     model = info$model,
-    data_type = info$data_type
+    data_type = info$data_type,
+    run_int_cov = info$int_cov,
+    k = info$k
   )]
   region_list[[i]] <- region_data[, .(
-    cell_type, model, data_type, int_cov, feature_id, int_acat_pvalue
+    cell_type, model, data_type, run_int_cov, int_cov, k, feature_id, int_acat_pvalue
   )]
 }
 
@@ -179,7 +219,7 @@ if (length(region_list) == 0) {
 }
 
 all_int_p <- bind_rows(region_list) |>
-  group_by(cell_type, model, data_type, int_cov, feature_id) |>
+  group_by(cell_type, model, data_type, run_int_cov, int_cov, k, feature_id) |>
   slice_min(int_acat_pvalue, n = 1, with_ties = FALSE) |>
   ungroup()
 
@@ -187,17 +227,17 @@ all_int_p <- bind_rows(region_list) |>
 # number of genes any method tested. CASTIE chunks of 50 would otherwise get a
 # much easier FDR if a run is incomplete or tests a subset.
 n_tests <- all_int_p |>
-  summarise(n_model = n(), .by = c(cell_type, model, data_type, int_cov)) |>
+  summarise(n_model = n(), .by = c(cell_type, model, data_type, run_int_cov, int_cov, k)) |>
   summarise(n_tests = max(n_model), .by = c(cell_type, int_cov, data_type))
 
 int_egenes <- all_int_p |>
   left_join(n_tests, by = c("cell_type", "int_cov", "data_type")) |>
   mutate(
     int_acat_bh = p.adjust(int_acat_pvalue, method = "BH", n = n_tests[1]),
-    .by = c(cell_type, model, data_type, int_cov)
+    .by = c(cell_type, model, data_type, run_int_cov, int_cov, k)
   ) |>
   filter(int_acat_bh < 0.05) |>
-  select(cell_type, model, data_type, int_cov, feature_id, int_acat_pvalue, int_acat_bh)
+  select(cell_type, model, data_type, run_int_cov, int_cov, k, feature_id, int_acat_pvalue, int_acat_bh)
 
 if (nrow(int_egenes) == 0) {
   write_tsv(empty_hits, "sc-int-eqtl-hits.tsv")
@@ -220,6 +260,8 @@ for (i in seq_len(nrow(sc_data_files))) {
     filter(
       cell_type == info$cell_type,
       model == info$model,
+      run_int_cov == info$int_cov,
+      k == info$k,
       (is.na(data_type) & is.na(info$data_type)) |
         (!is.na(data_type) & data_type == info$data_type)
     )
@@ -228,12 +270,13 @@ for (i in seq_len(nrow(sc_data_files))) {
   }
 
   variant_data <- fread(info$variant_file, showProgress = FALSE)
-  variant_data <- normalise_int_variants(variant_data)
+  variant_data <- normalise_int_variants(variant_data, info$int_cov)
 
   for (term in unique(egene_rows$int_cov)) {
-    int_p_col <- paste0("snp_x_", term, "_pvalue")
-    int_beta_col <- paste0("snp_x_", term, "_beta")
-    int_se_col <- paste0("snp_x_", term, "_se")
+    int_prefix <- if (info$k == "none") paste0("snp_x_", term) else "group_linear"
+    int_p_col <- paste0(int_prefix, "_pvalue")
+    int_beta_col <- paste0(int_prefix, "_beta")
+    int_se_col <- paste0(int_prefix, "_se")
     if (!all(c(int_p_col, int_beta_col, int_se_col) %in% names(variant_data))) {
       next
     }
@@ -249,7 +292,9 @@ for (i in seq_len(nrow(sc_data_files))) {
       cell_type = info$cell_type,
       model = info$model,
       data_type = info$data_type,
+      run_int_cov = info$int_cov,
       int_cov = term,
+      k = info$k,
       int_beta = get(int_beta_col),
       int_se = get(int_se_col),
       int_pvalue = get(int_p_col)
@@ -267,15 +312,16 @@ if (length(lead_list) == 0) {
 }
 
 int_hits <- bind_rows(lead_list) |>
-  group_by(cell_type, model, data_type, int_cov, feature_id) |>
+  group_by(cell_type, model, data_type, run_int_cov, int_cov, k, feature_id) |>
   arrange(int_pvalue, .by_group = TRUE) |>
   slice_head(n = 1) |>
   ungroup() |>
   inner_join(
     int_egenes,
-    by = c("cell_type", "model", "data_type", "int_cov", "feature_id")
+    by = c("cell_type", "model", "data_type", "run_int_cov", "int_cov", "k", "feature_id")
   ) |>
-  arrange(cell_type, model, data_type, int_acat_bh, int_pvalue) |>
+  left_join(gene_map, by = "feature_id") |>
+  arrange(cell_type, model, data_type, run_int_cov, k, int_acat_bh, int_pvalue) |>
   select(all_of(output_cols))
 
 write_tsv(int_hits, "sc-int-eqtl-hits.tsv")

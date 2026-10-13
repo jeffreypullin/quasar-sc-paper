@@ -103,7 +103,7 @@ p_heatmap <- count_data |>
     panel.grid.major.y = element_blank(),
     panel.grid.minor.y = element_blank(),
     legend.position = "right",
-    legend.title = element_text(family = "Helvetica", size = 14, color = "#222222")
+    legend.title = element_text(family = "Helvetica", size = 30, color = "#222222")
   )
 
 ggsave(

@@ -126,6 +126,24 @@ process BUILD_TREMOR_TQTL_COVS {
     """
 }
 
+process EXPAND_TREMOR_SC_COVS {
+    conda "$projectDir/envs/scanpy.yaml"
+    label "mega_mem"
+
+    input:
+        tuple val(info), path(tqtl_covs), path(sc_pheno)
+    output:
+        tuple val(info), path("${info.dataset}-${info.cell_type}-tqtl-sc-covs.tsv")
+
+    script:
+    """
+    expand-tremor-sc-covs.py \\
+        "$tqtl_covs" \\
+        "$sc_pheno" \\
+        "${info.dataset}-${info.cell_type}-tqtl-sc-covs.tsv"
+    """
+}
+
 process PREPARE_TREMOR_TENSORQTL_COMPARISON {
     conda "$projectDir/envs/tremor-tensorqtl.yaml"
     label "high_mem"

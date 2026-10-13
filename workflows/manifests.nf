@@ -42,10 +42,10 @@ workflow COLLECT_MANIFESTS {
         .collectFile(name: 'pb_quasar_file', newLine: true, sort: false)
 
     sc_quasar_file = Channel
-        .of("dataset\tmodel\tdata_type\tcell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tn_cells_target\tcount_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tpower_file\tconv_file\tgene_prop_file")
+        .of("dataset\tmodel\tdata_type\tcell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tn_cells_target\tcount_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tpower_file\tconv_file\tgene_prop_file\tablate")
         .concat(sc_quasar
             .map { info, region_file, variant_file, time_file, gene_prop_file, power_file, conv_file ->
-                "${info.dataset}\t${info.model}\t${info.data_type}\t${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.n_cells_target}\t${info.count_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${power_file}\t${conv_file}\t${gene_prop_file}"
+                "${info.dataset}\t${info.model}\t${info.data_type}\t${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.n_cells_target}\t${info.count_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${power_file}\t${conv_file}\t${gene_prop_file}\t${info.ablate ?: 'none'}"
             }
         )
         .collectFile(name: 'sc_quasar_file', newLine: true, sort: false)

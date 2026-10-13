@@ -31,15 +31,12 @@ sc_counts <- sc_counts |>
   mutate(log_cell_read_counts = ifelse(totals > 0, log(totals), 0)) |>
   select(sample_id, cell_id, log_cell_read_counts, any_of(chr_genes))
 
-covs <- covs |>
-  select(cell_id, sex, age, paste0("PC_", 1:2), paste0("geno_pc", 1:6), all_of(int_cov))
+# run-castie.py reads the covariates as the columns between cell_id and log_cell_read_counts.
+cov_cols <- setdiff(colnames(covs), c("sample_id", "cell_id"))
 
-all_data <- inner_join(sc_counts, covs, by = "cell_id") |>
+all_data <- inner_join(sc_counts, select(covs, -sample_id), by = "cell_id") |>
   filter(!is.na(.data[[int_cov]]), !is.na(sample_id)) |>
-  select(
-    sample_id, cell_id, sex, age, paste0("PC_", 1:2), paste0("geno_pc", 1:6),
-    all_of(int_cov), log_cell_read_counts, any_of(chr_genes)
-  )
+  select(sample_id, cell_id, all_of(cov_cols), log_cell_read_counts, any_of(chr_genes))
 
 write_tsv(
   all_data,

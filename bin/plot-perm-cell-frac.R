@@ -7,6 +7,7 @@ suppressPackageStartupMessages({
   library(purrr)
   library(tidyr)
   library(ggh4x)
+  library(data.table)
 })
 
 source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
@@ -17,15 +18,10 @@ sc_data_files <- read_tsv(args[1], show_col_types = FALSE)
 pb_data_files <- read_tsv(args[2], show_col_types = FALSE)
 
 cell_types <- c("Plasma", "B_IN", "CD4_NC")
-models <- c("lm", "nb_glm", "p_glmm_sc", "lmm_sc")
+models <- c("lm", "p_glmm_sc")
 
 compute_qq_data <- function(files) {
-  pvalue <- unlist(map(
-    files,
-    function(x) {
-      read_tsv(x, show_col_types = FALSE)$pvalue
-    }
-  ))
+  pvalue <- unlist(map(files, function(x) fread(x, select = "pvalue")$pvalue))
   pvalue <- pvalue[!is.na(pvalue)]
   n <- length(pvalue)
   if (n == 0) {

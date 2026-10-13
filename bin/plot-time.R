@@ -44,6 +44,11 @@ sc_time_data <- sc_data_files |>
   filter(n_cells_target < 0) |>
   filter(count_frac == 1) |>
   filter(cov_spec == "bulk_pca") |>
+  filter(int_cov == "none") |>
+  filter(as.character(k) == "none") |>
+  mutate(ablate = coalesce(ablate, "none")) |>
+  filter(ablate %in% c("none", "donor-totals")) |>
+  mutate(model = if_else(ablate == "donor-totals", paste0(model, "_ablate"), model)) |>
   rowwise() |>
   mutate(time = read_time(time_file)) |>
   ungroup() |>
@@ -74,6 +79,7 @@ quasar_p <- plot_data |>
   filter(cell_type %in% c("Plasma", "B_IN", "CD4_NC")) |>
   filter(type != "saigeqtl") |>
   filter(type != "pb-nb_glm") |>
+  filter(type != "pb-lm_cw") |>
   filter(type %in% names(method_lookup)) |>
   mutate(
     cell_type = factor(
@@ -111,9 +117,7 @@ comparison_p <- plot_data |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
   filter(cell_type %in% c("Plasma", "B_IN", "CD4_NC")) |>
-  filter(type %in% names(method_lookup)) |>
-  filter(type != "pb-nb_glm") |>
-  filter(type != "pb-lm") |>
+  filter(type %in% c("saigeqtl", "sc-p_glmm_sc")) |>
   mutate(
     cell_type = factor(
       cell_type_lookup[cell_type],
@@ -123,18 +127,15 @@ comparison_p <- plot_data |>
   ) |>
   mutate(
     cell_type = fct_reorder(cell_type, time, .fun = max),
-    type = fct_reorder(factor(type), time, .fun = sum)
+    type = fct_reorder(factor(type), time, .fun = sum),
+    hours = time / (60 * 60)
   ) |>
-  ggplot(aes(cell_type, time, fill = type)) +
+  ggplot(aes(cell_type, hours, fill = type)) +
   geom_col(position = "dodge2") +
   coord_flip() +
-  scale_y_continuous(
-    labels = label_timespan(),
-    breaks = breaks_width(24 * 60 * 60)
-  ) +
   labs(
     x = "Cell type",
-    y = "Time",
+    y = "Time (h)",
     fill = "Method"
   ) +
   scale_fill_manual(values = method_col_lookup) +

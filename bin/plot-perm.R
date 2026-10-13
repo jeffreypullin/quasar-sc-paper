@@ -149,10 +149,12 @@ compute_qq_data_by_maf <- function(variant_files) {
 }
 
 overall_plot_data <- sc_data_files |>
+  filter(startsWith(dataset, "randolph_")) |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
   filter(count_frac == 1) |>
-  summarise(file_list = list(variant_file), .by = c(dataset, cell_type, model)) |>
+  mutate(condition = sub("randolph_", "", dataset)) |>
+  summarise(file_list = list(variant_file), .by = c(condition, cell_type, model)) |>
   rowwise() |>
   mutate(qq_data = list(compute_qq_data(file_list))) |>
   ungroup() |>
@@ -183,7 +185,7 @@ overall_p <- overall_plot_data |>
     values = setNames(cell_type_cols, cell_type_lookup[names(cell_type_cols)]),
     drop = TRUE
   ) +
-  facet_grid(vars(dataset, model), vars(cell_type)) +
+  facet_grid(vars(condition), vars(cell_type)) +
   labs(
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)",
@@ -193,10 +195,10 @@ overall_p <- overall_plot_data |>
   theme(legend.position = "none")
 
 ggsave(
-  "perm-overall-plot.pdf",
+  "perm-sc-p_glmm_sc-plot.pdf",
   overall_p,
-  width = 16,
-  height = 10
+  width = 15,
+  height = 7
 )
 
 #prop_plot_data <- sc_data_files |>

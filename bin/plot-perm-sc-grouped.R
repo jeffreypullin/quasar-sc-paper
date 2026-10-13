@@ -98,7 +98,7 @@ stat_order <- function(stat) {
   )
 }
 
-collect_group_qq <- function(variant_files, prop_file, int_cov) {
+collect_group_qq <- function(variant_files, int_cov) {
   header <- names(fread(variant_files[[1]], nrows = 0, showProgress = FALSE))
   q_cols <- grep(
     paste0("^", int_cov, "_q[0-9]+_pvalue$"),
@@ -113,20 +113,8 @@ collect_group_qq <- function(variant_files, prop_file, int_cov) {
     return(tibble())
   }
 
-  prop_data <- fread(
-    prop_file,
-    select = c("feature_id", "pb_non_zero_frac"),
-    showProgress = FALSE
-  )
-  keep_genes <- prop_data[pb_non_zero_frac > 0.1, feature_id]
-
   variant_data <- rbindlist(lapply(variant_files, function(x) {
-    dt <- fread(
-      x,
-      select = c("feature_id", "maf", pvalue_cols),
-      showProgress = FALSE
-    )
-    dt[maf > 0.1 & feature_id %chin% keep_genes]
+    fread(x, select = pvalue_cols, showProgress = FALSE)
   }))
 
   bind_rows(lapply(pvalue_cols, function(col) {
@@ -139,11 +127,10 @@ plot_data <- sc_data_files |>
   filter(cell_frac == 1, indiv_frac == 1) |>
   summarise(
     file_list = list(variant_file),
-    prop_file = first(prop_file),
     .by = c(cell_type, int_cov, k)
   ) |>
   rowwise() |>
-  mutate(qq_data = list(collect_group_qq(file_list, prop_file, int_cov))) |>
+  mutate(qq_data = list(collect_group_qq(file_list, int_cov))) |>
   ungroup() |>
   select(-file_list) |>
   unnest(cols = qq_data) |>

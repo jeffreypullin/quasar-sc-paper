@@ -139,3 +139,11 @@ ggsave(
   width = 12,
   height = 10
 )
+
+saveRDS(
+  list(
+    int = mutate(int_plot_data, perm = "Within-sample"),
+    main = mutate(main_plot_data, perm = "Within-sample")
+  ),
+  "perm-sc-int-within-qq.rds"
+)

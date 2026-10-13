@@ -120,11 +120,11 @@ qq_plot <- function(plot_data, ylab_suffix) {
     geom_ribbon(linetype = 2, alpha = 0.1, colour = NA) +
     geom_abline(linetype = "dashed") +
     geom_point(alpha = 0.8) +
-    facet_wrap(~cell_type + int_cov + model) +
     scale_colour_manual(
       values = c(counts = "#2166AC", sct_counts = "#B2182B"),
       labels = c(counts = "counts", sct_counts = "sct_counts")
     ) +
+    guides(colour = guide_legend(override.aes = list(size = 5))) +
     scale_fill_manual(
       values = c(counts = "#2166AC", sct_counts = "#B2182B"),
       guide = "none"

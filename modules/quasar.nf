@@ -21,6 +21,7 @@ process COMBINE_SC_COVS {
 
     script:
     """
+    # Donor-level expression PCs 1-5, matching combine-pb-covs.R.
     combine-sc-covs.R "${info.cell_type}" "$pb_expr_covs" "$sc_expr_covs" "$geno_pcs"
     mv "${info.cell_type}-covs.tsv" "${info.dataset}-${info.cell_type}-covs.tsv"
     """
@@ -71,7 +72,7 @@ process RUN_QUASAR_PB {
       -c "$covs" \
       -o "${info.dataset}-${info.model}-${info.chr}-${info.cell_type}-${info.int_cov}" \
       --model "${info.model}" \
-      --mode                                                                             cis \
+      --mode                                                                                                                   cis \
       ${quant_res_flag} \
       ${apl_flag} \
       ${int_flag} \
@@ -83,21 +84,51 @@ process RUN_QUASAR_PB {
 }
 
 
+process RUN_QUASAR_PB_LM_CW {
+    label "pb_quasar"
+
+    input: tuple val(info), val(pheno_bed), val(covs), val(plink_bed), val(n_cells)
+    output: tuple val(info),
+        path("${info.dataset}-${info.model}-${info.chr}-${info.cell_type}-${info.int_cov}-quasar-cis-region.txt.gz"),
+        path("${info.dataset}-${info.model}-${info.chr}-${info.cell_type}-${info.int_cov}-quasar-cis-variant.txt.gz"),
+        path("${info.dataset}-${info.model}-${info.chr}-${info.cell_type}-${info.int_cov}-time.txt")
+
+    script:
+    def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
+    def base = "${info.dataset}-${info.model}-${info.chr}-${info.cell_type}-${info.int_cov}"
+    """
+    /usr/bin/time -p -o "${base}-time.txt" \
+      /home/jp2045/quasar/build/quasar \
+      -p "$prefix" \
+      -b "$pheno_bed" \
+      -c "$covs" \
+      --n-cells-file         "$n_cells" \
+      -o "${base}" \
+      --model lm_cw \
+      --mode cis \
+      --verbose
+    gzip "${base}-quasar-cis-variant.txt"
+    gzip "${base}-quasar-cis-region.txt"
+    """
+}
+
 process RUN_QUASAR_SC {
     label "sc_quasar"
 
     input: tuple val(info), val(pheno_bed), val(covs), val(anno), val(plink_bed), val(cell_groups)
     output: tuple val(info),
-        path("${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}-quasar-cis-region.txt.gz"), 
-        path("${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}-quasar-cis-variant.txt.gz"),
-        path("${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}-time.txt")
+        path("${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}${Utils.ablateSuffix(info)}-quasar-cis-region.txt.gz"), 
+        path("${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}${Utils.ablateSuffix(info)}-quasar-cis-variant.txt.gz"),
+        path("${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}${Utils.ablateSuffix(info)}-time.txt")
 
     script:
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
     def interaction_cov = info.interaction_cov ?: info.int_cov
     def int_flag = (info.int_cov != "none" && info.k == "none") ? "-i '${interaction_cov}'" : ""
     def cg_flag = (info.k != "none") ? "--cell-groups ${cell_groups}" : ""
-    def base = "${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}"
+    // Appended without a separator so unablated scripts stay byte-identical for -resume.
+    def ablate_flag = info.ablate ? " --ablate-${info.ablate}" : ""
+    def base = "${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}${Utils.ablateSuffix(info)}"
     """
     /usr/bin/time -p -o "${base}-time.txt" \
       /home/jp2045/quasar/build/quasar \
@@ -105,11 +136,12 @@ process RUN_QUASAR_SC {
       --sc-pheno "$pheno_bed" \
       --anno "$anno" \
       --cov "$covs" \
-      --out    "${base}" \
+      --out                          "${base}" \
       --model                                                                                                                                                                                                                                                                 ${info.model} \
       --mode cis \
       ${int_flag} \
       ${cg_flag} \
+      ${ablate_flag} \
       --verbose
     gzip "${base}-quasar-cis-variant.txt"
     gzip "${base}-quasar-cis-region.txt"
@@ -227,7 +259,8 @@ process RUN_QUASAR_GWAS {
 
     script:
     def out_prefix = "${info.dataset}-${info.gwas_label}-${info.model}-${info.cell_type}"
-    def apl_flags = (info.model == 'nb_glm') ? '--use-apl --use-quant-res' : ''
+    def apl_flags = (info.model == 'nb_glm') ? '--use-apl' : ''
+    def quant_res_flag = (info.model == "nb_glm") ? "--use-quant-res" : ""
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
     """
     /usr/bin/time -p -o "${out_prefix}-time.txt" \
@@ -239,6 +272,7 @@ process RUN_QUASAR_GWAS {
       --model ${info.model} \
       --mode   gwas \
       ${apl_flags} \
+      ${quant_res_flag} \
       --verbose
 
     awk 'BEGIN {FS=OFS="\t"} NR==1 || (toupper(\$10)!="NAN" && (\$10+0) < 5e-6)' \

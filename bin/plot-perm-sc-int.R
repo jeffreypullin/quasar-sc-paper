@@ -140,3 +140,11 @@ ggsave(
   width = 12,
   height = 10
 )
+
+saveRDS(
+  list(
+    int = mutate(int_plot_data, perm = "Interaction"),
+    main = mutate(main_plot_data, perm = "Interaction")
+  ),
+  "perm-sc-int-qq.rds"
+)

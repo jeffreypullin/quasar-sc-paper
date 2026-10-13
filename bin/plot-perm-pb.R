@@ -14,6 +14,8 @@ suppressPackageStartupMessages({
   library(ggh4x)
 })
 
+source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
+
 args <- commandArgs(trailingOnly = TRUE)
 
 pb_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
@@ -65,42 +67,58 @@ compute_qq_data_pb <- function(variant_files, prop_file) {
     mutate(log_x_bin_mid = seq(0.05, 5.95, by = 0.1)[as.numeric(x_bin)])
 }
 
-pb_overall_plot_data <- pb_data_files |>
-  filter(model == "lm") |>
-  filter(cell_frac == 1) |>
-  filter(indiv_frac == 1) |>
-  filter(count_frac == 1) |>
+pb_qq_data <- pb_data_files |>
+  filter(cell_frac == 1, indiv_frac == 1, count_frac == 1) |>
   summarise(
     file_list = list(variant_file),
     prop_file = first(prop_file),
-    .by = c(dataset, cell_type)
+    .by = c(dataset, cell_type, model)
   ) |>
   rowwise() |>
   mutate(qq_data = list(compute_qq_data_pb(file_list, prop_file))) |>
   ungroup() |>
   select(-file_list) |>
-  unnest(cols = qq_data)
+  unnest(cols = qq_data) |>
+  filter(cell_type %in% names(cell_type_lookup))
 
-pb_overall_p <- pb_overall_plot_data |>
-  ggplot(aes(log_x_bin_mid, log_y_pvalue,
-             ymin = log_lower_ci, ymax = log_upper_ci,
-             colour = cell_type)) +
-  geom_point(alpha = 0.8) +
-  geom_abline(linetype = "dashed") +
-  geom_ribbon(linetype = 2, alpha = 0.1) +
-  facet_wrap(~dataset + cell_type) +
-  labs(
-    x = "Expected -log10(p-value)",
-    y = "Observed -log10(p-value)",
-    colour = "Cell type"
+ct_levels <- unname(cell_type_lookup[
+  names(cell_type_lookup) %in% unique(pb_qq_data$cell_type)
+])
+
+for (model_name in unique(pb_qq_data$model)) {
+  plot_data <- pb_qq_data |>
+    filter(model == model_name) |>
+    mutate(cell_type = factor(unname(cell_type_lookup[cell_type]), levels = ct_levels))
+  n_ct <- n_distinct(plot_data$cell_type)
+  n_col <- min(n_ct, 4)
+
+  p <- plot_data |>
+    ggplot(aes(log_x_bin_mid, log_y_pvalue,
+               ymin = log_lower_ci, ymax = log_upper_ci,
+               colour = cell_type)) +
+    geom_point(alpha = 0.8) +
+    geom_abline(linetype = "dashed") +
+    geom_ribbon(linetype = 2, alpha = 0.1) +
+    scale_colour_manual(
+      values = setNames(cell_type_cols, cell_type_lookup[names(cell_type_cols)]),
+      drop = TRUE
+    ) +
+    facet_wrap(vars(cell_type), ncol = n_col) +
+    labs(
+      title = coalesce(unname(method_lookup[model_name]), model_name),
+      x = "Expected -log10(p-value)",
+      y = "Observed -log10(p-value)"
+    ) +
+    theme_jp() +
+    theme(legend.position = "none")
+
+  ggsave(
+    paste0("perm-pb-", model_name, "-plot.pdf"),
+    p,
+    width = 4 * n_col,
+    height = 4 * ceiling(n_ct / n_col) + 1
   )
-
-ggsave(
-  "perm-pb-overall-plot.pdf",
-  pb_overall_p,
-  width = 12,
-  height = 10
-)
+}
 
 #pb_overall_int_plot_data <- pb_data_files |>
 #  filter(cell_frac == 1) |>
@@ -125,13 +143,6 @@ ggsave(
 #    y = "Observed -log10(p-value)",
 #    colour = "Cell type"
 #  )
-
-ggsave(
-  "perm-pb-overall-int-plot.pdf",
-  pb_overall_p,
-  width = 12,
-  height = 10
-)
 
 #pb_cell_frac_plot_data <- pb_data_files |>
 #  filter(indiv_frac == 1) |>
@@ -161,10 +172,3 @@ ggsave(
 #    x = "Expected -log10(p-value)",
 #    y = "Observed -log10(p-value)"
 #  )
-
-ggsave(
-  "perm-pb-cell-frac-plot.pdf",
-  pb_overall_p,
-  width = 14,
-  height = 10
-)

@@ -29,9 +29,12 @@ pb_manifest <- pb_data_files |>
     cell_type %in% cell_types
   )
 
+sc_models <- c("p_glmm_sc", "lmm_sc")
+method_levels <- unname(method_lookup[c("lm", sc_models)])
+
 sc_manifest <- sc_data_files |>
   filter(
-    model == "p_glmm_sc",
+    model %in% sc_models,
     cov_spec == "bulk_pca",
     k == "none",
     cell_frac == 1,
@@ -58,13 +61,11 @@ read_egenes <- function(manifest, method) {
 
 egenes <- bind_rows(
   read_egenes(pb_manifest, "lm"),
-  read_egenes(sc_manifest, "p_glmm_sc")
+  read_egenes(filter(sc_manifest, model == "p_glmm_sc"), "p_glmm_sc"),
+  read_egenes(filter(sc_manifest, model == "lmm_sc"), "lmm_sc")
 ) |>
   mutate(
-    method_label = factor(
-      method_lookup[method],
-      levels = c(method_lookup[["lm"]], method_lookup[["p_glmm_sc"]])
-    ),
+    method_label = factor(method_lookup[method], levels = method_levels),
     cell_type_label = factor(
       cell_type_lookup[cell_type],
       levels = unname(cell_type_lookup[cell_types])
@@ -73,13 +74,10 @@ egenes <- bind_rows(
 
 grid <- bind_rows(
   pb_manifest |> distinct(cell_type, count_frac) |> mutate(method = "lm"),
-  sc_manifest |> distinct(cell_type, count_frac) |> mutate(method = "p_glmm_sc")
+  sc_manifest |> distinct(cell_type, count_frac, model) |> rename(method = model)
 ) |>
   mutate(
-    method_label = factor(
-      method_lookup[method],
-      levels = c(method_lookup[["lm"]], method_lookup[["p_glmm_sc"]])
-    ),
+    method_label = factor(method_lookup[method], levels = method_levels),
     cell_type_label = factor(
       cell_type_lookup[cell_type],
       levels = unname(cell_type_lookup[cell_types])
@@ -93,7 +91,7 @@ count_data <- grid |>
   ) |>
   mutate(n_egene = replace_na(n_egene, 0L))
 
-method_cols <- method_col_lookup[c(method_lookup[["lm"]], method_lookup[["p_glmm_sc"]])]
+method_cols <- method_col_lookup[method_levels]
 
 count_frac_breaks <- c(0.1, 0.25, 0.5, 1)
 count_frac_labels <- percent(count_frac_breaks, accuracy = NULL, drop0trailing = TRUE)

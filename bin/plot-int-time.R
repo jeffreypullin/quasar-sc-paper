@@ -26,7 +26,9 @@ sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
     cell_frac == 1,
     indiv_frac == 1,
     count_frac == 1,
-    n_cells_target < 0
+    n_cells_target < 0,
+    is.na(ablate) | ablate == "none",
+    int_cov != "none" | cov_spec == "bulk_pca"
   )
 
 if (!"data_type" %in% names(sc_data_files)) {
@@ -44,14 +46,6 @@ int_cov_lookup <- c(
   "pseudotime" = "Interaction (pseudotime)",
   "starcat_all" = "Interaction (STARCAT all)",
   "starcat_CD4_Naive" = "Interaction (STARCAT CD4 Naive)"
-)
-
-analysis_levels <- c(
-  "Main effect",
-  "Interaction (pseudotime)",
-  "Interaction (STARCAT CD4 Naive)",
-  "Interaction (STARCAT all)",
-  "Grouped"
 )
 
 time_data <- sc_data_files |>
@@ -101,45 +95,65 @@ if (length(args) >= 2) {
 }
 
 time_data <- time_data |>
+  filter(data_type == "counts", cell_type == "B_all") |>
   mutate(
-    analysis = factor(
-      analysis,
-      levels = intersect(
-        c(analysis_levels, setdiff(unique(analysis), analysis_levels)),
-        unique(analysis)
-      )
-    ),
-    cell_type = fct_reorder(factor(cell_type), time, .fun = max),
+    analysis = fct_reorder(analysis, time, .fun = max),
     model = factor(
       method_lookup[model],
       levels = method_lookup[c("p_glmm_sc", "lmm_sc", "castie")]
     ),
-    hours = time / (60 * 60),
-    data_type = factor(
-      data_type,
-      levels = intersect(
-        c("counts", "sct_counts", "log_counts"),
-        unique(as.character(data_type))
-      )
-    )
+    hours = time / (60 * 60)
   )
 
 p <- time_data |>
-  ggplot(aes(cell_type, hours, fill = analysis)) +
+  filter(model != method_lookup[["castie"]]) |>
+  mutate(model = droplevels(model)) |>
+  ggplot(aes(model, hours, fill = analysis)) +
   geom_col(position = "dodge2") +
   coord_flip() +
-  facet_wrap(vars(data_type, model), ncol = 3) +
   labs(
-    x = "Cell type",
+    x = NULL,
     y = "Time (h)",
     fill = NULL
   ) +
+  guides(fill = guide_legend(reverse = TRUE)) +
   theme_jp_vgrid() +
   theme(legend.position = "right")
 
 ggsave(
   "time-int-plot.pdf",
   p,
-  width = 12,
-  height = 4 * max(1, n_distinct(time_data$data_type))
+  width = 7,
+  height = 3
 )
+
+if (length(args) >= 2) {
+  castie_vs_quasar <- time_data |>
+    filter(
+      int_cov == "pseudotime",
+      analysis != "Grouped",
+      model %in% method_lookup[c("p_glmm_sc", "castie")]
+    ) |>
+    mutate(
+      model = droplevels(model),
+      fold = hours / min(hours),
+      label = ifelse(fold > 1, paste0(round(fold), "x"), "")
+    )
+
+  p_castie <- castie_vs_quasar |>
+    ggplot(aes(model, hours, fill = model)) +
+    geom_col(show.legend = FALSE) +
+    geom_text(aes(label = label), hjust = -0.2) +
+    scale_fill_manual(values = method_col_lookup) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+    coord_flip() +
+    labs(x = NULL, y = "Time (h)") +
+    theme_jp_vgrid()
+
+  ggsave(
+    "time-int-castie-plot.pdf",
+    p_castie,
+    width = 6,
+    height = 2
+  )
+}

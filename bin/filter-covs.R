@@ -19,6 +19,11 @@ if (cov_spec == "bulk_pca") {
   covs <- covs |>
     select(sample_id, cell_id, sex, age,
            starts_with("geno_pc"), starts_with("scPC_"))
+} else if (cov_spec == "mean_sc_pca") {
+  covs <- covs |>
+    mutate(across(starts_with("scPC_"), mean, .names = "mean_{.col}"), .by = sample_id) |>
+    select(sample_id, cell_id, sex, age,
+           starts_with("geno_pc"), starts_with("mean_scPC_"))
 } else if (cov_spec == "bulk_pca+pct_mito") {
   covs <- covs |>
     select(sample_id, cell_id, sex, age,

@@ -18,7 +18,7 @@ sc_data_files <- read_tsv(args[1], show_col_types = FALSE)
 pb_data_files <- read_tsv(args[2], show_col_types = FALSE)
 
 cell_types <- c("Plasma", "B_IN", "CD4_NC")
-models <- c("lm", "p_glmm_sc", "lmm_sc")
+models <- c("lm", "p_glmm_sc")
 
 compute_qq_data <- function(files) {
   pvalue <- unlist(map(
@@ -118,9 +118,10 @@ build_sc_plot_data <- function(model_name) {
     filter(
       model == model_name,
       cov_spec == "bulk_pca",
-      k == "none",
-      cell_frac == 1,
-      indiv_frac == 1,
+      as.character(k) == "none",
+      int_cov == "none",
+      as.numeric(cell_frac) == 1,
+      as.numeric(indiv_frac) == 1,
       cell_type %in% cell_types
     ) |>
     summarise(file_list = list(variant_file), .by = c(cell_type, count_frac)) |>
@@ -136,8 +137,9 @@ build_pb_plot_data <- function(model_name) {
     filter(
       model == model_name,
       int_cov == "none",
-      cell_frac == 1,
-      indiv_frac == 1,
+      pb_type == "logcounts",
+      as.numeric(cell_frac) == 1,
+      as.numeric(indiv_frac) == 1,
       cell_type %in% cell_types
     ) |>
     summarise(file_list = list(variant_file), .by = c(cell_type, count_frac)) |>

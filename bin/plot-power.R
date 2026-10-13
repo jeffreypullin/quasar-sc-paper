@@ -173,10 +173,7 @@ p_gene <- gene_plot_data |>
 
 p <- p_variant + p_gene +
   plot_layout(guides = "collect") &
-  theme(
-    legend.position = "right",
-    axis.text = element_text(size = 18)
-  )
+  theme(legend.position = "right")
 
 ggsave(
   "power-method-comparison-plot.pdf",

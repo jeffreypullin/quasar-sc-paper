@@ -74,6 +74,7 @@ if (nlevels(cell_attr$batch) < 2L) {
   stop("batch (pool) must have at least 2 levels for sctransform batch_var.")
 }
 
+set.seed(20261011)
 vst_out <- vst(
   umi,
   cell_attr = cell_attr,

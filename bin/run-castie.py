@@ -7,7 +7,10 @@ import subprocess
 import time
 from pathlib import Path
 
-SAMPLE_COVARS = "sex,age,PC_1,PC_2,geno_pc1,geno_pc2,geno_pc3,geno_pc4,geno_pc5,geno_pc6"
+def read_covars(path: str) -> list:
+    with open(path, "r", encoding="utf-8") as handle:
+        header = handle.readline().rstrip("\n").split("\t")
+    return header[header.index("cell_id") + 1 : header.index("log_cell_read_counts")]
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,7 +91,9 @@ def main() -> int:
     gene_list_tag = safe_tag(Path(args.gene_list).name)
     data_type_tag = safe_tag(args.data_type)
     int_cov = args.int_cov
-    all_covars = SAMPLE_COVARS + "," + int_cov
+    covars = read_covars(args.input)
+    all_covars = ",".join(covars)
+    sample_covars = ",".join(c for c in covars if c != int_cov)
     manifest_path = Path(
         f"{safe_tag(args.cell_type)}-{safe_tag(args.chrom)}-{data_type_tag}-{gene_list_tag}-castie-files.tsv"
     )
@@ -110,7 +115,7 @@ def main() -> int:
                 f"--phenoFile={args.input}",
                 f"--phenoCol={gene}",
                 f"--covarColList={all_covars}",
-                f"--sampleCovarColList={SAMPLE_COVARS}",
+                f"--sampleCovarColList={sample_covars}",
                 f"--dynamicCovarColList={int_cov}",
                 "--sampleIDColinphenoFile=sample_id",
                 "--traitType=count",

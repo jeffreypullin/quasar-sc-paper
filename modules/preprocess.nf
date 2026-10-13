@@ -133,23 +133,31 @@ process COMPUTE_SC_SCT_COUNTS {
 }
 
 process COMPUTE_SC_OFFSETS {
-    conda "$projectDir/envs/scanpy.yaml"
     label "high_mem"
-    publishDir "output", pattern: "*-offset-summary.tsv"
 
     input: tuple val(info), val(sc_pheno)
     output: tuple val(info),
         path("${info.dataset}-${info.cell_type}-offset-percell.tsv"),
         path("${info.dataset}-${info.cell_type}-offset-donorflat.tsv"),
-        path("${info.dataset}-${info.cell_type}-offset-constant.tsv"),
-        path("${info.dataset}-${info.cell_type}-offset-summary.tsv")
+        path("${info.dataset}-${info.cell_type}-offset-constant.tsv")
 
     script:
     """
-    compute-sc-offsets.py "${info.cell_type}" "$sc_pheno"
-    for spec in percell donorflat constant summary; do
-        mv "${info.cell_type}-offset-\$spec.tsv" "${info.dataset}-${info.cell_type}-offset-\$spec.tsv"
-    done
+    compute-sc-offsets.R "${info.dataset}" "${info.cell_type}" "$sc_pheno"
+    """
+}
+
+process EXTRACT_GENE_MAP {
+    conda "$projectDir/envs/scanpy.yaml"
+    storeDir "${projectDir}/data/gene-maps"
+    label "micro"
+
+    input: tuple val(dataset), val(h5ad)
+    output: path("${dataset}-gene-map.tsv")
+
+    script:
+    """
+    extract-gene-map.py "$h5ad" "${dataset}-gene-map.tsv"
     """
 }
 
@@ -251,6 +259,20 @@ process COMPUTE_PB_LOGCOUNTS{
     """
 }
 
+process COMPUTE_PB_N_CELLS{
+    conda "$projectDir/envs/scanpy.yaml"
+    label "micro"
+
+    input: tuple val(info), val(raw_sc_data)
+    output: tuple val(info), path("${info.dataset}-${info.cell_type}-pb-n-cells.tsv")
+
+    script:
+    """
+    compute-pb-n-cells.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "${info.n_cells_target}"
+    mv "${info.cell_type}-pb-n-cells.tsv" "${info.dataset}-${info.cell_type}-pb-n-cells.tsv"
+    """
+}
+
 process COMPUTE_PB_TMM_INT{
     conda "$projectDir/envs/scanpy.yaml"
     label "high_mem"
@@ -286,13 +308,17 @@ process SUMMARISE_DATASET_QC {
     label "high_mem"
 
     input: tuple val(dataset), val(raw_sc_data)
-    output: tuple val(dataset), path("${dataset}-cell-counts.tsv"), path("${dataset}-cells-per-indiv.tsv")
+    output: tuple val(dataset),
+        path("${dataset}-cell-counts.tsv"),
+        path("${dataset}-cells-per-indiv.tsv"),
+        path("${dataset}-zero-frac.tsv")
 
     script:
     """
     summarise-dataset-qc.py "$dataset" "$raw_sc_data"
     mv cell-counts.tsv "${dataset}-cell-counts.tsv"
     mv cells-per-indiv.tsv "${dataset}-cells-per-indiv.tsv"
+    mv zero-frac.tsv "${dataset}-zero-frac.tsv"
     """
 }
 
