@@ -32,7 +32,7 @@ pb_manifest <- pb_data_files |>
     int_cov == "none",
     cell_frac == 1,
     count_frac == 1,
-    n_cells_target < 0,
+    min_n_cells < 0,
     cell_type == "CD4_NC"
   )
 
@@ -45,7 +45,7 @@ sc_manifest <- sc_data_files |>
     int_cov == "none",
     cell_frac == 1,
     count_frac == 1,
-    n_cells_target < 0,
+    min_n_cells < 0,
     cell_type == "CD4_NC"
   )
 

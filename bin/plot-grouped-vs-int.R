@@ -120,8 +120,8 @@ if ("sc_type" %in% names(sc_data_files)) {
 if ("count_frac" %in% names(sc_data_files)) {
   sc_data_files <- filter(sc_data_files, count_frac == 1)
 }
-if ("n_cells_target" %in% names(sc_data_files)) {
-  sc_data_files <- filter(sc_data_files, n_cells_target < 0)
+if ("min_n_cells" %in% names(sc_data_files)) {
+  sc_data_files <- filter(sc_data_files, min_n_cells < 0)
 }
 
 int_manifest <- sc_data_files |>

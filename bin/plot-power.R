@@ -37,7 +37,7 @@ saigeqtl_n_sig_gene_data <- saigeqtl_data_files |>
 
 sc_n_sig_gene_data <- sc_data_files |>
   filter(indiv_frac == 1) |>
-  filter(n_cells_target < 0) |>
+  filter(min_n_cells < 0) |>
   filter(count_frac == 1) |>
   rowwise() |>
   mutate(test = list(read_tsv(region_file, show_col_types = FALSE))) |>
@@ -48,7 +48,7 @@ sc_n_sig_gene_data <- sc_data_files |>
   )
 
 gene_prop_data <- pb_data_files |>
-  filter(n_cells_target < 0) |>
+  filter(min_n_cells < 0) |>
   filter(count_frac == 1) |>
   rowwise() |>
   mutate(
@@ -59,7 +59,7 @@ gene_prop_data <- pb_data_files |>
 
 pb_n_sig_gene_data <- pb_data_files |>
   filter(indiv_frac == 1) |>
-  filter(n_cells_target < 0) |>
+  filter(min_n_cells < 0) |>
   filter(count_frac == 1) |>
   filter(int_cov == "none") |>
   rowwise() |>
@@ -80,7 +80,7 @@ pb_n_sig_gene_data <- pb_data_files |>
 
 sc_n_sig_var_data <- sc_data_files |>
   filter(indiv_frac == 1) |>
-  filter(n_cells_target < 0) |>
+  filter(min_n_cells < 0) |>
   filter(count_frac == 1) |>
   rowwise() |>
   mutate(n_sig_variant = list(read_tsv(power_file, show_col_types = FALSE))) |>
@@ -89,7 +89,7 @@ sc_n_sig_var_data <- sc_data_files |>
 
 pb_n_sig_var_data <- pb_data_files |>
   filter(indiv_frac == 1) |>
-  filter(n_cells_target < 0) |>
+  filter(min_n_cells < 0) |>
   filter(count_frac == 1) |>
   rowwise() |>
   mutate(n_sig_variant = list(read_tsv(power_file, show_col_types = FALSE))) |>

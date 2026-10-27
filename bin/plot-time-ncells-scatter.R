@@ -37,7 +37,7 @@ pb_manifest <- pb_data_files |>
     int_cov == "none",
     indiv_frac == 1,
     count_frac == 1,
-    n_cells_target < 0
+    min_n_cells < 0
   )
 
 sc_manifest <- sc_data_files |>
@@ -50,7 +50,7 @@ sc_manifest <- sc_data_files |>
     int_cov == "none",
     indiv_frac == 1,
     count_frac == 1,
-    n_cells_target < 0
+    min_n_cells < 0
   )
 
 time_data <- bind_rows(

@@ -32,6 +32,7 @@ tail_data <- perm_sc_data_files |>
     as.character(k) == "none",
     indiv_frac == 1,
     count_frac == 1,
+    as.numeric(min_n_cells) < 0,
     cell_type %in% main_types
   ) |>
   mutate(summary = map(variant_file, tail_summary)) |>

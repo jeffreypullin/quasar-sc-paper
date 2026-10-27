@@ -40,8 +40,9 @@ saigeqtl_time_data <- saigeqtl_data_files |>
   mutate(cell_frac = 1, indiv_frac = 1)
 
 sc_time_data <- sc_data_files |>
+  filter(dataset == "onek1k") |>
   filter(indiv_frac == 1) |>
-  filter(n_cells_target < 0) |>
+  filter(min_n_cells < 0) |>
   filter(count_frac == 1) |>
   filter(cov_spec == "bulk_pca") |>
   filter(int_cov == "none") |>
@@ -49,19 +50,16 @@ sc_time_data <- sc_data_files |>
   mutate(ablate = coalesce(ablate, "none")) |>
   filter(ablate %in% c("none", "donor-totals")) |>
   mutate(model = if_else(ablate == "donor-totals", paste0(model, "_ablate"), model)) |>
-  rowwise() |>
-  mutate(time = read_time(time_file)) |>
-  ungroup() |>
+  mutate(time = map_dbl(time_file, read_time)) |>
   summarise(time = sum(time), .by = c(cell_type, cell_frac, indiv_frac, model))
 
 pb_time_data <- pb_data_files |>
   filter(indiv_frac == 1) |>
-  filter(n_cells_target < 0) |>
+  filter(min_n_cells < 0) |>
   filter(count_frac == 1) |>
-  rowwise() |>
-  mutate(time = read_time(time_file)) |>
-  ungroup() |>
-  summarise(time = sum(time), .by = c(cell_type, model, cell_frac, indiv_frac))
+  mutate(time = map_dbl(time_file, read_time)) |>
+  summarise(time = sum(time), .by = c(cell_type, model, cell_frac, indiv_frac)) |>
+  mutate(cell_frac = as.numeric(cell_frac), indiv_frac = as.numeric(indiv_frac))
 
 plot_data <- bind_rows(
   saigeqtl_time_data |>
@@ -117,7 +115,7 @@ comparison_p <- plot_data |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
   filter(cell_type %in% c("Plasma", "B_IN", "CD4_NC")) |>
-  filter(type %in% c("saigeqtl", "sc-p_glmm_sc")) |>
+  filter(type %in% c("saigeqtl", "sc-p_glmm_sc", "sc-p_glmm_sc_ablate")) |>
   mutate(
     cell_type = factor(
       cell_type_lookup[cell_type],

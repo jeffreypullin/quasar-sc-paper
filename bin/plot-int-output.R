@@ -17,8 +17,8 @@ keep_full <- function(data) {
   if ("count_frac" %in% names(data)) {
     data <- filter(data, count_frac == 1)
   }
-  if ("n_cells_target" %in% names(data)) {
-    data <- filter(data, n_cells_target < 0)
+  if ("min_n_cells" %in% names(data)) {
+    data <- filter(data, min_n_cells < 0)
   }
   data
 }

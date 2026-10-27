@@ -21,7 +21,7 @@ sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
     data_type == "counts",
     indiv_frac == 1,
     count_frac == 1,
-    as.numeric(n_cells_target) < 0,
+    as.numeric(min_n_cells) < 0,
     ablate == "none"
   ) |>
   filter(int_cov == "none" | as.character(k) != "none")

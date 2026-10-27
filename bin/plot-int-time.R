@@ -26,7 +26,7 @@ sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
     cell_frac == 1,
     indiv_frac == 1,
     count_frac == 1,
-    n_cells_target < 0,
+    min_n_cells < 0,
     is.na(ablate) | ablate == "none",
     int_cov != "none" | cov_spec == "bulk_pca"
   )

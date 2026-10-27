@@ -20,7 +20,7 @@ read_model_variants <- function(files, model_name) {
       .data$model == model_name,
       .data$cell_frac == 1,
       .data$indiv_frac == 1,
-      .data$n_cells_target < 0,
+      .data$min_n_cells < 0,
       .data$count_frac == 1,
       .data$int_cov == "none"
     ) |>
@@ -55,7 +55,7 @@ read_sc_variants <- function(files) {
       .data$cov_spec == "bulk_pca",
       .data$cell_frac == 1,
       .data$indiv_frac == 1,
-      .data$n_cells_target < 0,
+      .data$min_n_cells < 0,
       .data$count_frac == 1,
       .data$int_cov == "none",
       .data$k == "none"

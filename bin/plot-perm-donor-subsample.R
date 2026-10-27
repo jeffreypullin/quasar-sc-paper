@@ -174,7 +174,7 @@ sc_manifest <- sc_obs_files |>
     cell_type == cell_type_keep,
     as.numeric(cell_frac) == 1,
     as.numeric(count_frac) == 1,
-    as.numeric(n_cells_target) < 0,
+    as.numeric(min_n_cells) < 0,
     int_cov == "none",
     ablate == "none"
   )

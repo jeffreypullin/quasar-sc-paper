@@ -149,12 +149,17 @@ compute_qq_data_by_maf <- function(variant_files) {
 }
 
 overall_plot_data <- sc_data_files |>
-  filter(startsWith(dataset, "randolph_")) |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
   filter(count_frac == 1) |>
-  mutate(condition = sub("randolph_", "", dataset)) |>
-  summarise(file_list = list(variant_file), .by = c(condition, cell_type, model)) |>
+  mutate(
+    dataset_label = if_else(
+      startsWith(dataset, "randolph_"),
+      sub("randolph_", "", dataset),
+      dataset
+    )
+  ) |>
+  summarise(file_list = list(variant_file), .by = c(dataset_label, cell_type, model)) |>
   rowwise() |>
   mutate(qq_data = list(compute_qq_data(file_list))) |>
   ungroup() |>
@@ -164,35 +169,31 @@ overall_plot_data <- sc_data_files |>
 ct_levels <- unname(cell_type_lookup[
   names(cell_type_lookup) %in% unique(overall_plot_data$cell_type)
 ])
+model_levels <- unique(unname(method_lookup[c("p_glmm_sc", "lmm_sc")]))
 
 overall_p <- overall_plot_data |>
   filter(cell_type %in% names(cell_type_lookup)) |>
   filter(model %in% names(method_lookup)) |>
   mutate(
     cell_type = factor(unname(cell_type_lookup[cell_type]), levels = ct_levels),
-    model = factor(
-      method_lookup[model],
-      levels = unique(unname(method_lookup[c("p_glmm_sc", "lmm_sc")]))
-    )
+    model = factor(method_lookup[model], levels = model_levels)
   ) |>
   ggplot(aes(log_x_bin_mid, log_y_pvalue,
              ymin = log_lower_ci, ymax = log_upper_ci,
-             colour = cell_type)) +
+             colour = model, fill = model)) +
   geom_point(alpha = 0.8) +
   geom_abline(linetype = "dashed") +
   geom_ribbon(linetype = 2, alpha = 0.1) +
-  scale_colour_manual(
-    values = setNames(cell_type_cols, cell_type_lookup[names(cell_type_cols)]),
-    drop = TRUE
-  ) +
-  facet_grid(vars(condition), vars(cell_type)) +
+  scale_colour_manual(values = method_col_lookup, drop = TRUE) +
+  scale_fill_manual(values = method_col_lookup, drop = TRUE) +
+  facet_grid(vars(dataset_label), vars(cell_type)) +
   labs(
     x = "Expected -log10(p-value)",
     y = "Observed -log10(p-value)",
-    colour = "Cell type"
+    colour = "Model",
+    fill = "Model"
   ) +
-  theme_jp() +
-  theme(legend.position = "none")
+  theme_jp()
 
 ggsave(
   "perm-sc-p_glmm_sc-plot.pdf",

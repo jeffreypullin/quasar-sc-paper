@@ -13,10 +13,10 @@ theme_jp <- function() {
 
   theme(
     plot.title = element_text(
-      family =  "Helvetica", size = 40, color = "#222222"
+      family =  "Helvetica", size = 18, color = "#222222"
     ),
     plot.subtitle = element_text(
-      family = font, size = 32, margin = ggplot2::margin(0, 0, 10, 0)
+      family = font, size = 14, margin = ggplot2::margin(0, 0, 10, 0)
     ),
     plot.caption = element_blank(),
     plot.title.position = "plot",
@@ -25,9 +25,9 @@ theme_jp <- function() {
     legend.background = element_blank(),
     legend.title = element_blank(),
     legend.key = element_blank(),
-    legend.text = element_text(family = font, size = 30, color = "#222222", hjust = 0),
-    axis.title = element_text(family = font, size = 30, color = "#222222"),
-    axis.text = element_text(family = font, size = 30, color = "#222222"),
+    legend.text = element_text(family = font, size = 12, color = "#222222", hjust = 0),
+    axis.title = element_text(family = font, size = 12, color = "#222222"),
+    axis.text = element_text(family = font, size = 11, color = "#222222"),
     axis.ticks = element_blank(),
     axis.line = element_blank(),
     panel.grid.major.y = element_line(color = "#cbcbcb"),
@@ -36,7 +36,7 @@ theme_jp <- function() {
     panel.grid.minor.x = element_blank(),
     panel.background = element_blank(),
     strip.background = element_rect(fill = "white"),
-    strip.text = element_text(family = font, size = 32)
+    strip.text = element_text(family = font, size = 12)
   )
 }
 

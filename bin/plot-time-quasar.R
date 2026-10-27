@@ -30,7 +30,7 @@ is_full_data <- function(data) {
       dataset == "onek1k",
       as.numeric(cell_frac) == 1,
       as.numeric(indiv_frac) == 1,
-      as.numeric(n_cells_target) < 0,
+      as.numeric(min_n_cells) < 0,
       as.numeric(count_frac) == 1,
       int_cov == "none"
     )

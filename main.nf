@@ -53,7 +53,7 @@ include { PERMUTE_BED ; PERMUTE_COV ; PERMUTE_SC_COV_WITHIN ;
           PERMUTE_BED as PERMUTE_BED_GWAS ;
           PERMUTE_BED as PERMUTE_BED_PB ;
           PERMUTE_COV as PERMUTE_SC_COV } from './modules/permute'
-include { COMPUTE_GENE_PROPERTIES } from './modules/analysis'
+include { COMPUTE_GENE_PROPERTIES ; COMPUTE_GENE_FILTER_STATS } from './modules/analysis'
 include { COMPUTE_CONVERGENCE as COMPUTE_CONVERGENCE_PB } from './modules/analysis'
 include { COMPUTE_CONVERGENCE as COMPUTE_CONVERGENCE_SC } from './modules/analysis'
 include {
@@ -261,7 +261,7 @@ workflow {
                     cell_type: ct.toString(),
                     cell_frac: 1.0d,
                     indiv_frac: 1.0d,
-                    n_cells_target: -1,
+                    min_n_cells: -1,
                     count_frac: 1.0d,
                     condition: dcfg.condition,
                     parent_dataset: dcfg.parent_dataset,
@@ -276,33 +276,24 @@ workflow {
                         // Joint cell × individual grid for CD4_NC power heatmap.
                         combos += joint_fracs.collectMany { cf ->
                             joint_fracs.collect { inf ->
-                                info + [cell_frac: cf, indiv_frac: inf, n_cells_target: -1, count_frac: 1.0d, joint_both_frac: true]
+                                info + [cell_frac: cf, indiv_frac: inf, min_n_cells: -1, count_frac: 1.0d, joint_both_frac: true]
                             }
                         }
                     }
-                    def n_cells_targets = [CD4_NC: 300, B_IN: 100, Plasma: 5]
-                    // Targets at or above this offset keep the same donors as
-                    // the equal-cell run but all of their cells.
-                    def donor_only_offset = 1000000
-                    if (n_cells_targets.containsKey(info.cell_type)) {
-                        def n_cells = n_cells_targets[info.cell_type]
-                        [n_cells, donor_only_offset + n_cells].each { target ->
-                            combos += [[
-                                dataset: name,
-                                cell_type: info.cell_type,
-                                cell_frac: 1.0d,
-                                indiv_frac: 1.0d,
-                                n_cells_target: target,
-                                count_frac: 1.0d
-                            ]]
+                    // Same cell-fraction grid, dropping donors left with <5 or <10 cells.
+                    if (name == "onek1k" && info.cell_type in ["B_IN", "CD4_NC"]) {
+                        [5, 10].each { min_cells ->
+                            combos += cell_fracs.collect { f ->
+                                info + [cell_frac: f, indiv_frac: 1.0d, min_n_cells: min_cells, count_frac: 1.0d]
+                            }
                         }
                     }
                     // Independent count-depth series on full cells / individuals.
                     def count_fracs = [0.1d, 0.25d, 0.5d, 1.0d]
                     combos += count_fracs.collect { f ->
-                        info + [cell_frac: 1.0d, indiv_frac: 1.0d, n_cells_target: -1, count_frac: f]
+                        info + [cell_frac: 1.0d, indiv_frac: 1.0d, min_n_cells: -1, count_frac: f]
                     }
-                    combos = combos.unique { x -> "${x.cell_frac}|${x.indiv_frac}|${x.n_cells_target}|${x.count_frac}" }
+                    combos = combos.unique { x -> "${x.cell_frac}|${x.indiv_frac}|${x.min_n_cells}|${x.count_frac}" }
                     return combos
                 }
                 return [info]
@@ -317,7 +308,7 @@ workflow {
                             cell_type: cname,
                             cell_frac: 1.0d,
                             indiv_frac: 1.0d,
-                            n_cells_target: -1,
+                            min_n_cells: -1,
                             count_frac: 1.0d,
                             condition: dcfg.condition,
                             parent_dataset: dcfg.parent_dataset,
@@ -330,22 +321,49 @@ workflow {
     }
 
     cell_infos = cell_infos.map { info ->
-        def has_n_cells_filter = (info.n_cells_target >= 0)
-        def is_full_data = (info.cell_frac == 1.0d && info.indiv_frac == 1.0d && !has_n_cells_filter && info.count_frac == 1.0d)
+        def has_min_n_cells = (info.min_n_cells >= 0)
+        def is_full_data = (info.cell_frac == 1.0d && info.indiv_frac == 1.0d && !has_min_n_cells && info.count_frac == 1.0d)
         info + [is_full_data: is_full_data]
     }
 
-    // TEMP: full-data cell types (B_all for the pseudotime interaction, skip T_all) plus the
-    // proportional cell-fraction series on the three main cell types (p_glmm_sc / lm perms),
-    // plus the CD4_NC donor-fraction series and the three-cell-type count-fraction series.
+    // TEMP: full-data cell types (skip T_all), the B_IN / CD4_NC cell-fraction series
+    // (and the same grid with a 5- or 10-cell donor filter), the CD4_NC donor-fraction
+    // series, and the count-fraction series.
     cell_infos = cell_infos.filter {
         it.cell_type != "T_all" && (
             it.is_full_data
             || Utils.isCellFracSeries(it)
+            || Utils.isCellFracDonorFilterSeries(it)
             || Utils.isDonorSubsampleSeries(it)
             || Utils.isCountFracSeries(it)
         )
     }
+
+    // min_n_cells combos that leave fewer than params.min_donors donors are recorded
+    // and not run. nDonorsAfterSelection reads the OneK1K cells-per-individual table.
+    cluster_sizes
+        .multiMap { dataset, sizes, cells_per_indiv ->
+            plots: tuple(dataset, sizes, cells_per_indiv)
+            cells: cells_per_indiv
+        }
+        .set { cluster_size_ch }
+    cell_info_branches = cell_infos.branch {
+        min_cells: it.min_n_cells >= 0
+        other: true
+    }
+    min_cells_scored = cell_info_branches.min_cells
+        .combine(cluster_size_ch.cells)
+        .map { info, cells_per_indiv ->
+            tuple(info, Utils.nDonorsAfterSelection(cells_per_indiv, info))
+        }
+        .branch {
+            skip: it[1] < (params.min_donors as int)
+            keep: true
+        }
+    skipped_combos = min_cells_scored.skip
+    cell_infos = cell_info_branches.other.mix(
+        min_cells_scored.keep.map { info, _n_donors -> info }
+    )
 
     // Pair each info with its dataset's h5ad.
     sc_input = cell_infos
@@ -358,6 +376,11 @@ workflow {
             .map { info, scf -> tuple(info.dataset, info, scf) }
             .combine(anno_bed, by: 0)
             .map { dataset, info, scf, anno -> tuple(info, scf, anno) }
+    )
+    gene_filter_stats = COMPUTE_GENE_FILTER_STATS(
+        ds_meta
+            .filter { dataset, _h5ad -> dataset == "onek1k" }
+            .combine(anno_bed, by: 0)
     )
 
     sc_input = sc_input.combine(gene_properties, by: 0)
@@ -384,7 +407,7 @@ workflow {
                     (it[0].cell_type == "CD4_NC"
                         && it[0].indiv_frac == 1.0d
                         && it[0].count_frac == 1.0d
-                        && it[0].n_cells_target < 0
+                        && it[0].min_n_cells < 0
                         && !is_joint_both_frac(it[0]))
                 )
             }
@@ -412,10 +435,10 @@ workflow {
                        || (it[0].indiv_frac == 1.0d && it[0].count_frac == 1.0d)
                        || (it[0].cell_type == "CD4_NC" && it[0].cell_frac == 1.0d && it[0].count_frac == 1.0d)
                        || is_joint_both_frac(it[0])
-                       || (it[0].n_cells_target >= 0 && it[0].count_frac == 1.0d)
+                       || (it[0].min_n_cells >= 0 && it[0].count_frac == 1.0d)
                        || (it[0].cell_frac == 1.0d
                            && it[0].indiv_frac == 1.0d
-                           && it[0].n_cells_target < 0
+                           && it[0].min_n_cells < 0
                            && it[0].count_frac != 1.0d) }
     )
     sc_pheno = sc_counts.mix(sc_logcounts).mix(sc_sct_counts)
@@ -574,11 +597,11 @@ workflow {
             (it[0].model in ["lm", "nb_glm", "lm_cw"] && it[0].indiv_frac == 1.0d && it[0].count_frac == 1.0d) ||
             (it[0].model == "lm" && it[0].cell_type == "CD4_NC" && it[0].cell_frac == 1.0d && it[0].count_frac == 1.0d) ||
             (it[0].model == "lm" && is_joint_both_frac(it[0])) ||
-            (it[0].model in ["lm", "nb_glm"] && it[0].n_cells_target >= 0 && it[0].count_frac == 1.0d) ||
+            (it[0].model in ["lm", "nb_glm"] && it[0].min_n_cells >= 0 && it[0].count_frac == 1.0d) ||
             (it[0].model in ["lm", "nb_glm"]
                 && it[0].cell_frac == 1.0d
                 && it[0].indiv_frac == 1.0d
-                && it[0].n_cells_target < 0
+                && it[0].min_n_cells < 0
                 && it[0].count_frac != 1.0d)
         })
         .filter { Utils.keepPbQuasarTemp(it[0]) || Utils.keepPbPermTemp(it[0]) }
@@ -590,7 +613,7 @@ workflow {
         other: true
     }
     def pb_n_cells_key = { info ->
-        [info.dataset, info.cell_type, info.cell_frac, info.indiv_frac, info.n_cells_target, info.count_frac]
+        [info.dataset, info.cell_type, info.cell_frac, info.indiv_frac, info.min_n_cells, info.count_frac]
     }
     pb_lm_cw_input = pb_quasar_branched.lm_cw
         .map { info, pheno_bed, covs, bed_file, _grm_path ->
@@ -650,7 +673,7 @@ workflow {
             info.pb_type == "tmm_int" &&
             info.cell_frac == 1.0d &&
             info.indiv_frac == 1.0d &&
-            info.n_cells_target < 0 &&
+            info.min_n_cells < 0 &&
             info.count_frac == 1.0d
         }
         .map { info, region_file, variant_file, time_file, gene_prop_file, power_file, conv_file ->
@@ -880,13 +903,13 @@ workflow {
                    && is_joint_both_frac(it[0]))
                || (it[0].model in ["p_glmm_sc", "lmm_sc"]
                    && it[0].cov_spec == "bulk_pca"
-                   && it[0].n_cells_target >= 0
+                   && it[0].min_n_cells >= 0
                    && it[0].count_frac == 1.0d)
                || (it[0].model in ["p_glmm_sc", "lmm_sc"]
                    && it[0].cov_spec == "bulk_pca"
                    && it[0].cell_frac == 1.0d
                    && it[0].indiv_frac == 1.0d
-                   && it[0].n_cells_target < 0
+                   && it[0].min_n_cells < 0
                    && it[0].count_frac != 1.0d) }
 
     sc_cell_group_k = Channel.of("none", "seacells", 5)
@@ -957,7 +980,8 @@ workflow {
         // Tremor/Randolph SC mapping use configured cell types;
         // OneK1K main-effect SC is all clusters except B_all / T_all,
         // plus the count-frac series on Plasma / B_IN / CD4_NC, plus CD4_NC
-        // cell-fraction and donor-fraction subsampling.
+        // cell-fraction and donor-fraction subsampling, plus the B_IN / CD4_NC
+        // cell-fraction grid with a 5- or 10-cell donor filter.
         .filter { it[0].dataset == "tremor"
                || is_randolph_dataset(it[0].dataset)
                || it[0].cell_type in ["B_all", "T_all"]
@@ -973,21 +997,21 @@ workflow {
                    && it[0].int_cov == "none"
                    && it[0].cell_frac == 1.0d
                    && it[0].indiv_frac == 1.0d
-                   && it[0].n_cells_target < 0)
+                   && it[0].min_n_cells < 0)
                || (it[0].model in ["p_glmm_sc", "lmm_sc"]
                    && it[0].cell_type in ["Plasma", "B_IN", "CD4_NC"]
                    && it[0].k == "none"
                    && it[0].int_cov == "none"
                    && it[0].cell_frac == 1.0d
                    && it[0].indiv_frac == 1.0d
-                   && it[0].n_cells_target >= 0
+                   && it[0].min_n_cells >= 0
                    && it[0].count_frac == 1.0d)
                || (it[0].model in ["p_glmm_sc", "lmm_sc"]
                    && it[0].cell_type == "CD4_NC"
                    && it[0].k == "none"
                    && it[0].int_cov == "none"
                    && it[0].count_frac == 1.0d
-                   && it[0].n_cells_target < 0
+                   && it[0].min_n_cells < 0
                    && !is_joint_both_frac(it[0])
                    && (it[0].cell_frac != 1.0d || it[0].indiv_frac != 1.0d))
                || (it[0].dataset == "onek1k"
@@ -997,8 +1021,12 @@ workflow {
                    && it[0].int_cov == "none"
                    && it[0].indiv_frac == 1.0d
                    && it[0].count_frac == 1.0d
-                   && it[0].n_cells_target < 0
-                   && !is_joint_both_frac(it[0])) }
+                   && it[0].min_n_cells < 0
+                   && !is_joint_both_frac(it[0]))
+               || (it[0].model == "p_glmm_sc"
+                   && it[0].k == "none"
+                   && it[0].int_cov == "none"
+                   && Utils.isCellFracDonorFilterSeries(it[0])) }
         .filter { it[0].data_type != "sct_counts"
                || (it[0].cell_type == "B_all"
                    && it[0].int_cov in ["none", "pseudotime"]
@@ -1026,14 +1054,14 @@ workflow {
                || (it[0].model in ["p_glmm_sc", "lmm_sc"]
                    && it[0].k == "none"
                    && it[0].int_cov == "none"
-                   && it[0].n_cells_target >= 0
+                   && it[0].min_n_cells >= 0
                    && it[0].count_frac == 1.0d)
                || (it[0].model in ["p_glmm_sc", "lmm_sc"]
                    && it[0].k == "none"
                    && it[0].int_cov == "none"
                    && it[0].cell_frac == 1.0d
                    && it[0].indiv_frac == 1.0d
-                   && it[0].n_cells_target < 0
+                   && it[0].min_n_cells < 0
                    && it[0].count_frac != 1.0d) }
 
     sc_quasar_observed_input = sc_quasar_input_full
@@ -1152,7 +1180,7 @@ workflow {
     // Genotype permutation analysis.
     rep_bed_files = bed_files
       .combine(channel.of(1..10))
-      // TEMP: SC genotype perms only on OneK1K for the B_all pseudotime interaction model.
+      // TEMP: genotype perms for the OneK1K donor-fraction and cell-fraction series.
       .filter { it[0] == "onek1k" }
     permute_bed_files = PERMUTE_BED(rep_bed_files)
 
@@ -1161,15 +1189,9 @@ workflow {
       .filter { it[0].cov_spec == "bulk_pca" || int_cov_for_cov_spec.containsKey(it[0].cov_spec) }
       .filter( { is_int_sc_cov(it[0].int_cov) } )
       .filter( {it[0].k in ["none", 5]})
-      // TEMP: SC genotype perms only on the full-data B_all pseudotime interaction model.
-      .filter {
-          it[0].model == "p_glmm_sc"
-              && it[0].data_type == "counts"
-              && it[0].k in ["none", 5]
-              && it[0].is_full_data
-              && it[0].cell_type == "B_all"
-              && it[0].int_cov == "pseudotime"
-      }
+      // TEMP: p_glmm_sc perms on the donor-fraction, cell-fraction, and
+      // donor-filtered cell-fraction series.
+      .filter { Utils.keepScPermTemp(it[0]) }
       // No permutations on the CD4_NC joint cell × individual grid (keep full data only).
       .filter( { !is_joint_both_frac(it[0]) || it[0].is_full_data } )
       .map { info, sc_pheno, covs, anno, bed, cg ->
@@ -1186,8 +1208,8 @@ workflow {
 
     rep_bed_files_pb = bed_files
       .combine(channel.of(1..10))
-      // TEMP: skip genotype perms while only running B_all pseudotime interaction perms.
-      .filter { false }
+      // TEMP: PB lm perms on the OneK1K cell-fraction series.
+      .filter { it[0] == "onek1k" }
     permute_bed_files_pb = PERMUTE_BED_PB(rep_bed_files_pb)
 
     perm_pb_quasar_input = pb_quasar_input
@@ -1195,8 +1217,6 @@ workflow {
       .filter { it[0].int_cov == "none" }
       .filter { !(it[0].cell_type in ["B_all", "T_all"]) }
       .filter { Utils.keepPbPermTemp(it[0]) }
-      // TEMP: skip genotype perms while only running B_all pseudotime interaction perms.
-      .filter { false }
       .filter {
           it[0].dataset == "onek1k"
               || it[0].dataset == "tremor"
@@ -1209,7 +1229,7 @@ workflow {
           it[0].is_full_data
               || (it[0].cell_frac == 1.0d
                   && it[0].indiv_frac == 1.0d
-                  && it[0].n_cells_target < 0
+                  && it[0].min_n_cells < 0
                   && it[0].count_frac != 1.0d)
               || Utils.isDonorSubsampleSeries(it[0])
               || Utils.isCellFracSeries(it[0])
@@ -1389,7 +1409,7 @@ workflow {
       .filter { info, cov_spec, cov -> info.is_full_data && info.cell_type == "B_all" }
       .map { info, cov_spec, cov ->
         tuple(
-          [info.dataset, info.cell_type, info.cell_frac, info.indiv_frac, info.n_cells_target, info.count_frac],
+          [info.dataset, info.cell_type, info.cell_frac, info.indiv_frac, info.min_n_cells, info.count_frac],
           info.dataset,
           int_cov_for_cov_spec[cov_spec],
           info.cell_type,
@@ -1399,7 +1419,7 @@ workflow {
       .combine(
         sc_counts.map { type, info, counts ->
           tuple(
-            [info.dataset, info.cell_type, info.cell_frac, info.indiv_frac, info.n_cells_target, info.count_frac],
+            [info.dataset, info.cell_type, info.cell_frac, info.indiv_frac, info.min_n_cells, info.count_frac],
             counts
           )
         },
@@ -1450,7 +1470,8 @@ workflow {
         perm_int_sc_quasar_within_filt,
         perm_int_sc_quasar_logcount_filt,
         perm_sc_quasar_filt,
-        perm_pb_quasar_filt
+        perm_pb_quasar_filt,
+        skipped_combos
     )
 
     gene_map = EXTRACT_GENE_MAP(ds_meta.filter { dataset, _h5ad -> dataset == "onek1k" })
@@ -1474,15 +1495,17 @@ workflow {
         COLLECT_MANIFESTS.out.sc_quasar_perm_int_logcount_file,
         COLLECT_MANIFESTS.out.perm_sc_quasar_file,
         COLLECT_MANIFESTS.out.perm_pb_quasar_file,
+        COLLECT_MANIFESTS.out.skipped_combos_file,
         saigeqtl_file,
         castie_file,
-        cluster_sizes,
+        cluster_size_ch.plots,
         tremor_tensorqtl_compare,
         dataset_qc,
         active_datasets,
         gene_map,
         all_bed,
         sc_preprocess_input,
-        sc_covs
+        sc_covs,
+        gene_filter_stats
     )
 }

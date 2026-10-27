@@ -32,21 +32,6 @@ process PLOT_POWER_QUASAR {
     """
 }
 
-process PLOT_POWER_N_CELLS_FILTER {
-    publishDir "output"
-
-    input:
-        val pb_quasar_file
-        val sc_quasar_file
-    output:
-        path "power-n-cells-filter-plot.pdf"
-
-    script:
-    """
-    plot-power-n-cells-filter.R $pb_quasar_file $sc_quasar_file
-    """
-}
-
 process PLOT_POWER_OFFSET {
     publishDir "output"
     label "high_mem"
@@ -182,6 +167,38 @@ process PLOT_PERM_CELL_FRAC {
     script:
     """
     plot-perm-cell-frac.R $perm_sc_quasar_file $perm_pb_quasar_file
+    """
+}
+
+process PLOT_PERM_CELL_FRAC_MIN_CELLS {
+    label "high_mem"
+    publishDir "output"
+
+    input:
+        val perm_sc_quasar_file
+        path skipped_combos_file
+    output:
+        path("perm-cell-frac-p_glmm_sc-min5-plot.pdf")
+        path("perm-cell-frac-p_glmm_sc-min10-plot.pdf")
+
+    script:
+    """
+    plot-perm-cell-frac-min-cells.R $perm_sc_quasar_file $skipped_combos_file
+    """
+}
+
+process PLOT_PERM_CELL_FRAC_DONOR_SPARSITY {
+    label "high_mem"
+    publishDir "output"
+
+    input: val perm_sc_quasar_file
+    output:
+        path("perm-cell-frac-p_glmm_sc-donor-sparsity-plot.pdf")
+        path("perm-cell-frac-p_glmm_sc-donor-nz10-plot.pdf")
+
+    script:
+    """
+    plot-perm-cell-frac-donor-sparsity.R $perm_sc_quasar_file
     """
 }
 
@@ -966,8 +983,27 @@ process COMPUTE_GENE_PROPERTIES {
 
     script:
     """
-    compute-gene-properties.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$adata" "$anno_file" "${info.n_cells_target}" "${info.count_frac}"
+    compute-gene-properties.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$adata" "$anno_file" "${info.min_n_cells}" "${info.count_frac}"
     mv "${info.cell_type}-gene-properties.tsv" "${info.dataset}-${info.cell_type}-gene-properties.tsv"
+    """
+}
+
+process COMPUTE_GENE_FILTER_STATS {
+    conda "$projectDir/envs/scanpy.yaml"
+    label "high_mem"
+    publishDir "output"
+
+    input: tuple val(dataset), val(adata), path(anno_file)
+    output:
+        tuple val(dataset),
+            path("${dataset}-gene-filter-stats.tsv"),
+            path("${dataset}-gene-filter-donor-summary.tsv")
+
+    script:
+    """
+    compute-gene-filter-stats.py "$adata" "$anno_file"
+    mv gene-filter-stats.tsv "${dataset}-gene-filter-stats.tsv"
+    mv gene-filter-donor-summary.tsv "${dataset}-gene-filter-donor-summary.tsv"
     """
 }
 
@@ -982,6 +1018,22 @@ process PLOT_GENE_PROPERTIES {
     script: 
     """
     plot-gene-properties.R "$gene_properties_file"
+    """
+}
+
+process PLOT_GENE_FILTER_INTERSECTION {
+    publishDir "output"
+
+    input:
+        path gene_filter_stats
+        path gene_filter_donor_summary
+    output:
+        tuple path("gene-filter-n-genes-retained-plot.pdf"),
+            path("gene-filter-donors-retained-plot.pdf")
+
+    script:
+    """
+    plot-gene-filter-intersection.R "$gene_filter_stats" "$gene_filter_donor_summary"
     """
 }
 

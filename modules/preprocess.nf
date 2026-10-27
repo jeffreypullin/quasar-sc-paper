@@ -113,7 +113,7 @@ process COMPUTE_SC_COUNTS{
 
     script:
     """
-    compute-sc-counts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.n_cells_target}" "${info.count_frac}"
+    compute-sc-counts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.min_n_cells}" "${info.count_frac}"
     mv "${info.cell_type}-sc-pheno.tsv" "${info.dataset}-${info.cell_type}-sc-pheno.tsv"
     """
 }
@@ -170,7 +170,7 @@ process COMPUTE_SC_LOGCOUNTS {
 
     script:
     """
-    compute-sc-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.n_cells_target}" "${info.count_frac}"
+    compute-sc-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.min_n_cells}" "${info.count_frac}"
     mv "${info.cell_type}-sc-logcounts.tsv" "${info.dataset}-${info.cell_type}-sc-logcounts.tsv"
     """
 }
@@ -240,7 +240,7 @@ process COMPUTE_PB_COUNTS{
 
     script:
     """
-    compute-pb-counts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.n_cells_target}" "${info.count_frac}"
+    compute-pb-counts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.min_n_cells}" "${info.count_frac}"
     mv "${info.cell_type}-pb-pheno.tsv" "${info.dataset}-${info.cell_type}-pb-pheno.tsv"
     """
 }
@@ -254,7 +254,7 @@ process COMPUTE_PB_LOGCOUNTS{
 
     script:
     """
-    compute-pb-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.n_cells_target}" "${info.count_frac}"
+    compute-pb-logcounts.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.min_n_cells}" "${info.count_frac}"
     mv "${info.cell_type}-pb-pheno.tsv" "${info.dataset}-${info.cell_type}-pb-pheno.tsv"
     """
 }
@@ -268,7 +268,7 @@ process COMPUTE_PB_N_CELLS{
 
     script:
     """
-    compute-pb-n-cells.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "${info.n_cells_target}"
+    compute-pb-n-cells.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "${info.min_n_cells}"
     mv "${info.cell_type}-pb-n-cells.tsv" "${info.dataset}-${info.cell_type}-pb-n-cells.tsv"
     """
 }
@@ -282,7 +282,7 @@ process COMPUTE_PB_TMM_INT{
 
     script:
     """
-    compute-pb-tmm-int.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.n_cells_target}" "${info.count_frac}"
+    compute-pb-tmm-int.py "${info.cell_type}" "${info.cell_frac}" "${info.indiv_frac}" "$raw_sc_data" "$gene_properties" "${info.min_n_cells}" "${info.count_frac}"
     mv "${info.cell_type}-pb-pheno.tsv" "${info.dataset}-${info.cell_type}-pb-pheno.tsv"
     """
 }

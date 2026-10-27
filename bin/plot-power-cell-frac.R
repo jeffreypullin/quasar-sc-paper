@@ -41,41 +41,46 @@ sc_manifest <- sc_data_files |>
     cell_type %in% cell_types
   )
 
-read_egenes <- function(manifest, method) {
+group_cols <- c("cell_type", "method", "min_n_cells", "cell_frac")
+
+read_egenes <- function(manifest) {
   manifest |>
-    mutate(method = method) |>
     rowwise() |>
     mutate(gene_tbl = list(read_tsv(region_file, show_col_types = FALSE))) |>
     unnest(gene_tbl) |>
     ungroup() |>
     mutate(
       region_bh = p.adjust(pvalue, method = "BH"),
-      .by = c(cell_type, method, cell_frac)
+      .by = all_of(group_cols)
     ) |>
     filter(region_bh < 0.05) |>
-    select(cell_type, method, cell_frac, feature_id) |>
+    select(all_of(group_cols), feature_id) |>
     distinct()
 }
 
 egenes <- bind_rows(
-  read_egenes(pb_manifest, "lm"),
-  read_egenes(filter(sc_manifest, model == "p_glmm_sc"), "p_glmm_sc"),
-  read_egenes(filter(sc_manifest, model == "lmm_sc"), "lmm_sc")
+  pb_manifest |> mutate(method = "lm"),
+  sc_manifest |> mutate(method = model)
 ) |>
-  mutate(
-    method_label = factor(method_lookup[method], levels = method_levels),
-    cell_type_label = factor(
-      cell_type_lookup[cell_type],
-      levels = unname(cell_type_lookup[cell_types])
-    )
-  )
+  read_egenes()
+
+min_n_cells_levels <- sort(unique(c(pb_manifest$min_n_cells, sc_manifest$min_n_cells)))
+filter_labels <- if_else(
+  min_n_cells_levels < 0,
+  "All donors",
+  sprintf("Donors with >= %d cells", min_n_cells_levels)
+)
 
 grid <- bind_rows(
-  pb_manifest |> distinct(cell_type, cell_frac) |> mutate(method = "lm"),
-  sc_manifest |> distinct(cell_type, cell_frac, model) |> rename(method = model)
+  pb_manifest |> distinct(cell_type, min_n_cells, cell_frac) |> mutate(method = "lm"),
+  sc_manifest |> distinct(cell_type, min_n_cells, cell_frac, model) |> rename(method = model)
 ) |>
   mutate(
     method_label = factor(method_lookup[method], levels = method_levels),
+    filter_label = factor(
+      filter_labels[match(min_n_cells, min_n_cells_levels)],
+      levels = filter_labels
+    ),
     cell_type_label = factor(
       cell_type_lookup[cell_type],
       levels = unname(cell_type_lookup[cell_types])
@@ -84,34 +89,42 @@ grid <- bind_rows(
 
 count_data <- grid |>
   left_join(
-    egenes |> summarise(n_egene = n(), .by = c(cell_type, method, cell_frac)),
-    by = c("cell_type", "method", "cell_frac")
+    egenes |> summarise(n_egene = n(), .by = all_of(group_cols)),
+    by = group_cols
   ) |>
   mutate(n_egene = replace_na(n_egene, 0L))
 
 method_cols <- method_col_lookup[method_levels]
 
-cell_frac_breaks <- c(0.005, 0.25, 0.5, 0.75, 1)
+cell_frac_breaks <- sort(unique(grid$cell_frac))
 cell_frac_labels <- percent(cell_frac_breaks, accuracy = NULL, drop0trailing = TRUE)
 
-p_counts <- count_data |>
-  ggplot(aes(cell_frac, n_egene, colour = method_label, group = method_label)) +
-  geom_line(linewidth = 0.8) +
-  geom_point(size = 2) +
-  scale_x_continuous(
-    breaks = cell_frac_breaks,
-    labels = cell_frac_labels,
-    expand = expansion(mult = c(0.08, 0.03))
-  ) +
-  scale_colour_manual(values = method_cols) +
-  facet_wrap(~cell_type_label, scales = "free_y") +
-  labs(
-    x = "Cell fraction",
-    y = "Number of eGenes",
-    colour = "Method"
-  ) +
-  theme_jp() +
-  theme(legend.position = "right")
+plot_cell_frac <- function(data, y, y_lab) {
+  data |>
+    ggplot(aes(
+      cell_frac, {{ y }},
+      colour = method_label,
+      linetype = filter_label,
+      shape = filter_label,
+      group = interaction(method_label, filter_label)
+    )) +
+    geom_line(linewidth = 0.8) +
+    geom_point(size = 2) +
+    scale_x_log10(breaks = cell_frac_breaks, labels = cell_frac_labels) +
+    scale_colour_manual(values = method_cols) +
+    labs(
+      x = "Cell fraction",
+      y = y_lab,
+      colour = "Method",
+      linetype = "Donor filter",
+      shape = "Donor filter"
+    ) +
+    theme_jp() +
+    theme(legend.position = "right")
+}
+
+p_counts <- plot_cell_frac(count_data, n_egene, "Number of eGenes") +
+  facet_wrap(~cell_type_label, scales = "free_y")
 
 ggsave(
   "power-cell-frac-counts-plot.pdf",
@@ -121,7 +134,7 @@ ggsave(
 )
 
 truth <- egenes |>
-  filter(method == "lm", cell_frac == 1) |>
+  filter(method == "lm", cell_frac == 1, min_n_cells < 0) |>
   select(cell_type, feature_id) |>
   distinct()
 
@@ -132,8 +145,8 @@ recall_data <- grid |>
   left_join(
     egenes |>
       inner_join(truth, by = c("cell_type", "feature_id")) |>
-      summarise(n_recovered = n(), .by = c("cell_type", "method", "cell_frac")),
-    by = c("cell_type", "method", "cell_frac")
+      summarise(n_recovered = n(), .by = all_of(group_cols)),
+    by = group_cols
   ) |>
   left_join(truth_n, by = "cell_type") |>
   mutate(
@@ -141,25 +154,9 @@ recall_data <- grid |>
     recall = if_else(n_truth > 0, n_recovered / n_truth, NA_real_)
   )
 
-p_recall <- recall_data |>
-  ggplot(aes(cell_frac, recall, colour = method_label, group = method_label)) +
-  geom_line(linewidth = 0.8) +
-  geom_point(size = 2) +
-  scale_x_continuous(
-    breaks = cell_frac_breaks,
-    labels = cell_frac_labels,
-    expand = expansion(mult = c(0.08, 0.03))
-  ) +
+p_recall <- plot_cell_frac(recall_data, recall, "Proportion of full LM eGenes recovered") +
   scale_y_continuous(limits = c(0, 1), labels = percent_format()) +
-  scale_colour_manual(values = method_cols) +
-  facet_wrap(~cell_type_label) +
-  labs(
-    x = "Cell fraction",
-    y = "Proportion of full LM eGenes recovered",
-    colour = "Method"
-  ) +
-  theme_jp() +
-  theme(legend.position = "right")
+  facet_wrap(~cell_type_label)
 
 ggsave(
   "power-cell-frac-recall-plot.pdf",

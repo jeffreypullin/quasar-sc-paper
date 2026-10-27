@@ -73,8 +73,8 @@ read_file_list <- function(path) {
       data[[col]] <- 1
     }
   }
-  if (!"n_cells_target" %in% names(data)) {
-    data$n_cells_target <- -1
+  if (!"min_n_cells" %in% names(data)) {
+    data$min_n_cells <- -1
   }
   if (!"ablate" %in% names(data)) {
     data$ablate <- "none"
@@ -89,7 +89,7 @@ read_file_list <- function(path) {
     ) |>
     filter(
       k %in% c("none", "5"), int_cov != "none",
-      cell_frac == 1, indiv_frac == 1, count_frac == 1, n_cells_target < 0,
+      cell_frac == 1, indiv_frac == 1, count_frac == 1, min_n_cells < 0,
       ablate == "none"
     )
 }

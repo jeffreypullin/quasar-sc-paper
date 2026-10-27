@@ -3,12 +3,12 @@ class Utils {
     static attachGeneProperties(ch, gene_properties) {
         ch
             .map { info, region, variant, time ->
-                [[dataset: info.dataset, cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac, n_cells_target: info.n_cells_target, count_frac: info.count_frac],
+                [[dataset: info.dataset, cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac, min_n_cells: info.min_n_cells, count_frac: info.count_frac],
                  info, region, variant, time]
             }
             .combine(
                 gene_properties.map { info, gp ->
-                    [[dataset: info.dataset, cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac, n_cells_target: info.n_cells_target, count_frac: info.count_frac], gp]
+                    [[dataset: info.dataset, cell_type: info.cell_type, cell_frac: info.cell_frac, indiv_frac: info.indiv_frac, min_n_cells: info.min_n_cells, count_frac: info.count_frac], gp]
                 },
                 by: 0
             )
@@ -30,6 +30,21 @@ class Utils {
         ds.toString().startsWith("randolph_")
     }
 
+    // Donors left by apply_cell_selection (indiv_frac assumed 1): each donor keeps
+    // max(1, floor(cell_frac * n)) cells, then must have >= min_n_cells.
+    static int nDonorsAfterSelection(cells_per_indiv, info) {
+        def label = info.cell_type.replace("_", " ")
+        java.nio.file.Files.readAllLines(cells_per_indiv)
+            .drop(1)
+            .collect { it.split("\t") }
+            .findAll { it[0] == label && (it[2] as int) > 0 }
+            .count { row ->
+                def n = row[2] as int
+                def n_ds = info.cell_frac < 1.0d ? Math.max(1, Math.floor(info.cell_frac * n) as int) : n
+                n_ds >= info.min_n_cells
+            } as int
+    }
+
     static boolean isJointBothFrac(info) {
         info.joint_both_frac == true
     }
@@ -40,17 +55,28 @@ class Utils {
             && info.cell_type == "CD4_NC"
             && info.cell_frac == 1.0d
             && info.count_frac == 1.0d
-            && info.n_cells_target < 0
+            && info.min_n_cells < 0
             && !isJointBothFrac(info)
     }
 
-    // Proportional cell-fraction series on the three main cell types, including the full-data point.
+    // Proportional cell-fraction series (Plasma skipped for now).
     static boolean isCellFracSeries(info) {
         info.dataset == "onek1k"
-            && info.cell_type in ["Plasma", "B_IN", "CD4_NC"]
+            && info.cell_type in ["B_IN", "CD4_NC"]
             && info.indiv_frac == 1.0d
             && info.count_frac == 1.0d
-            && info.n_cells_target < 0
+            && info.min_n_cells < 0
+            && !isJointBothFrac(info)
+    }
+
+    // Cell-fraction × min_n_cells (keep donors with >= 5 or >= 10 cells after subsample).
+    // Plasma skipped for now.
+    static boolean isCellFracDonorFilterSeries(info) {
+        info.dataset == "onek1k"
+            && info.cell_type in ["B_IN", "CD4_NC"]
+            && info.indiv_frac == 1.0d
+            && info.count_frac == 1.0d
+            && info.min_n_cells in [5, 10]
             && !isJointBothFrac(info)
     }
 
@@ -60,7 +86,7 @@ class Utils {
             && info.cell_type in ["Plasma", "B_IN", "CD4_NC"]
             && info.cell_frac == 1.0d
             && info.indiv_frac == 1.0d
-            && info.n_cells_target < 0
+            && info.min_n_cells < 0
             && !isJointBothFrac(info)
     }
 
@@ -68,83 +94,43 @@ class Utils {
         info.ablate ? "-ablate-${info.ablate}".toString() : ""
     }
 
-    // TEMP: OneK1K / Randolph full-data PB lm / lm_cw / nb_glm / p_glmm_id for the power plot,
-    // plus CD4_NC donor-fraction lm.
+    // TEMP: donor-fraction + three-type cell-fraction lm.
     static boolean keepPbQuasarTemp(info) {
-        ((info.dataset == "onek1k" || isRandolphDataset(info.dataset))
-            && info.model in ["lm", "lm_cw", "nb_glm", "p_glmm_id"]
-            && !(info.cell_type in ["B_all", "T_all"])
-            && info.is_full_data
-            && info.int_cov == "none")
-            || (info.model == "lm"
-                && info.int_cov == "none"
-                && isDonorSubsampleSeries(info))
-    }
-
-    // TEMP: OneK1K full-data nb_glm genotype perms on all cell types,
-    // p_glmm_id on the three main cell types, plus lm on the CD4_NC donor-fraction
-    // and three-cell-type cell-fraction series.
-    static boolean keepPbPermTemp(info) {
-        (info.dataset == "onek1k"
-            && (info.model == "nb_glm"
-                || (info.model == "p_glmm_id" && info.cell_type in ["Plasma", "B_IN", "CD4_NC"]))
-            && !(info.cell_type in ["B_all", "T_all"])
-            && info.is_full_data
-            && info.int_cov == "none")
-            || (info.model == "lm"
-                && info.int_cov == "none"
-                && (isDonorSubsampleSeries(info) || isCellFracSeries(info) || isCountFracSeries(info)))
-    }
-
-    // TEMP: OneK1K / Randolph full-data single-cell P-GLMM for the QuASAR power plot,
-    // plus the CD4_NC donor-fraction series, plus the cell-level covariate
-    // comparison on Plasma / B_IN / CD4_NC, plus the full-data B_all pseudotime interaction
-    // (continuous and K = 5 binned) and its matching main-effect run for timing comparison.
-    static boolean keepScQuasarTemp(info) {
-        ((info.dataset == "onek1k" || isRandolphDataset(info.dataset))
-            && info.model == "p_glmm_sc"
-            && info.data_type == "counts"
-            && info.k == "none"
+        info.model == "lm"
             && info.int_cov == "none"
-            && !info.ablate
-            && ((info.cov_spec == "bulk_pca"
-                    && ((!(info.cell_type in ["B_all", "T_all"]) && info.is_full_data)
-                        || isDonorSubsampleSeries(info)))
-                || (info.cov_spec in ["sc_pca", "mean_sc_pca", "bulk_pca+pct_mito", "bulk_pca+cell_cycle"]
-                    && info.cell_type in ["Plasma", "B_IN", "CD4_NC"]
-                    && info.is_full_data)))
-            || (info.dataset == "onek1k"
-                && info.model == "p_glmm_sc"
-                && info.data_type in ["counts", "sct_counts"]
-                && info.k in ["none", 5]
-                && info.int_cov == "pseudotime"
-                && info.cell_type == "B_all"
-                && info.is_full_data
-                && !info.ablate)
-            || (info.dataset == "onek1k"
-                && info.model == "p_glmm_sc"
-                && info.data_type == "counts"
-                && info.k == "none"
-                && info.int_cov == "none"
-                && info.cov_spec == "bulk_pca"
-                && info.cell_type == "B_all"
-                && info.is_full_data
-                && !info.ablate)
+            && (isDonorSubsampleSeries(info) || isCellFracSeries(info))
     }
 
-    // TEMP: OneK1K / Randolph p_glmm_sc genotype perms on full data for all cell types,
-    // plus the OneK1K cell-fraction series and CD4_NC donor-fraction, for calibration plots.
-    static boolean keepScPermTemp(info) {
-        ((info.dataset == "onek1k" || isRandolphDataset(info.dataset))
-            && info.model == "p_glmm_sc"
+    // TEMP: three-type cell-fraction lm genotype perms for cell-frac QQ plots.
+    static boolean keepPbPermTemp(info) {
+        info.model == "lm"
+            && info.int_cov == "none"
+            && isCellFracSeries(info)
+    }
+
+    // TEMP: donor-fraction + cell-fraction (+ donor-filtered cell-fraction) p_glmm_sc.
+    static boolean keepScQuasarTemp(info) {
+        info.model == "p_glmm_sc"
             && info.data_type == "counts"
             && info.cov_spec == "bulk_pca"
             && info.k == "none"
             && info.int_cov == "none"
             && !info.ablate
-            && ((!(info.cell_type in ["B_all", "T_all"]) && info.is_full_data)
+            && (isDonorSubsampleSeries(info)
                 || isCellFracSeries(info)
-                || isDonorSubsampleSeries(info)
-                || isCountFracSeries(info)))
+                || isCellFracDonorFilterSeries(info))
+    }
+
+    // TEMP: same series for p_glmm_sc genotype perms.
+    static boolean keepScPermTemp(info) {
+        info.model == "p_glmm_sc"
+            && info.data_type == "counts"
+            && info.cov_spec == "bulk_pca"
+            && info.k == "none"
+            && info.int_cov == "none"
+            && !info.ablate
+            && (isDonorSubsampleSeries(info)
+                || isCellFracSeries(info)
+                || isCellFracDonorFilterSeries(info))
     }
 }
