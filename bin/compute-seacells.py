@@ -62,7 +62,7 @@ adata = sc.read_h5ad(h5ad_file)
 
 # Exclude ribosomal and mitochondrial genes from HVG candidates.
 # Including them risks circular confounding: strong eQTLs at e.g. RPS26 shift
-# cells in PCA space by genotype, causing spurious csaQTL signals.
+# cells in PCA space by genotype, causing spurious cell-state signals.
 exclude_genes = set(
     g for g in adata.var_names
     if g.startswith(("RPS", "RPL", "MRPS", "MRPL", "MT-"))

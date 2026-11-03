@@ -189,20 +189,6 @@ process EXTRACT_SC_LOGCOUNTS {
     """
 }
 
-process COMPUTE_CSAQTL_COUNTS {
-    conda "$projectDir/envs/scanpy.yaml"
-    label "high_mem"
-
-    input: tuple val(info), val(groups), val(h5ad)
-    output: tuple val(info), path("${info.dataset}-${info.cell_type}-csaqtl-pheno.tsv")
-
-    script:
-    """
-    compute-csaqtl-counts.py "${info.cell_type}" "$groups" "$h5ad"
-    mv "${info.cell_type}-csaqtl-pheno.tsv" "${info.dataset}-${info.cell_type}-csaqtl-pheno.tsv"
-    """
-}
-
 process COMPUTE_SC_PC_PHENO {
     conda "$projectDir/envs/scanpy.yaml"
     label "high_mem"

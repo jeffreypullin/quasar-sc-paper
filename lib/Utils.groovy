@@ -94,43 +94,51 @@ class Utils {
         info.ablate ? "-ablate-${info.ablate}".toString() : ""
     }
 
-    // TEMP: donor-fraction + three-type cell-fraction lm.
+    // TEMP: full-data Tremor lm. tmm_int uses the TensorQTL covariates;
+    // logcounts stays on the OneK1K covariate set (sex, age, expr PC1–5, geno PC1–6).
     static boolean keepPbQuasarTemp(info) {
-        info.model == "lm"
+        info.dataset == "tremor"
+            && info.model == "lm"
+            && info.pb_type in ["tmm_int", "logcounts"]
             && info.int_cov == "none"
-            && (isDonorSubsampleSeries(info) || isCellFracSeries(info))
+            && info.is_full_data
     }
 
-    // TEMP: three-type cell-fraction lm genotype perms for cell-frac QQ plots.
+    // TEMP: same Tremor lm runs for genotype permutations.
     static boolean keepPbPermTemp(info) {
-        info.model == "lm"
-            && info.int_cov == "none"
-            && isCellFracSeries(info)
+        keepPbQuasarTemp(info)
     }
 
-    // TEMP: donor-fraction + cell-fraction (+ donor-filtered cell-fraction) p_glmm_sc.
+    // OneK1K uses the selection already applied to sc_quasar_input_full.
+    // Tremor stays on full-data counts with p_glmm_sc and logcounts with lmm_sc,
+    // each with bulk PCA and TensorQTL covariates.
     static boolean keepScQuasarTemp(info) {
-        info.model == "p_glmm_sc"
-            && info.data_type == "counts"
-            && info.cov_spec == "bulk_pca"
+        if (info.dataset == "onek1k") {
+            return true
+        }
+        info.dataset == "tremor"
+            && info.is_full_data
             && info.k == "none"
             && info.int_cov == "none"
+            && info.cov_spec in ["bulk_pca", "tqtl"]
             && !info.ablate
-            && (isDonorSubsampleSeries(info)
-                || isCellFracSeries(info)
-                || isCellFracDonorFilterSeries(info))
+            && ((info.model == "p_glmm_sc" && info.data_type == "counts")
+                || (info.model == "lmm_sc" && info.data_type == "log_counts"))
     }
 
-    // TEMP: same series for p_glmm_sc genotype perms.
+    // Full-data genotype permutations for the non-zero-fraction QQ plot:
+    // counts with p_glmm_sc and logcounts with lmm_sc, bulk PCA covariates
+    // (plus TensorQTL covariates for Tremor). OneK1K runs every individual
+    // cell type; the B_all / T_all groupings are skipped.
     static boolean keepScPermTemp(info) {
-        info.model == "p_glmm_sc"
-            && info.data_type == "counts"
-            && info.cov_spec == "bulk_pca"
+        (info.dataset in ["tremor", "onek1k"])
+            && !(info.cell_type in ["B_all", "T_all"])
+            && info.is_full_data
             && info.k == "none"
             && info.int_cov == "none"
+            && info.cov_spec in ["bulk_pca", "tqtl"]
             && !info.ablate
-            && (isDonorSubsampleSeries(info)
-                || isCellFracSeries(info)
-                || isCellFracDonorFilterSeries(info))
+            && ((info.model == "p_glmm_sc" && info.data_type == "counts")
+                || (info.model == "lmm_sc" && info.data_type == "log_counts"))
     }
 }

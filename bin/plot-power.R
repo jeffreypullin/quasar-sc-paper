@@ -47,36 +47,38 @@ sc_n_sig_gene_data <- sc_data_files |>
     .by = c(cell_type, cov_spec, cell_frac, model)
   )
 
-gene_prop_data <- pb_data_files |>
-  filter(min_n_cells < 0) |>
-  filter(count_frac == 1) |>
-  rowwise() |>
-  mutate(
-    gene_data = list(read_tsv(gene_prop_file, show_col_types = FALSE)),
-  ) |>
-  unnest(gene_data) |>
-  distinct(feature_id, cell_type, model, .keep_all = TRUE)
+pb_gene_files <- pb_data_files |>
+  filter(indiv_frac == 1, min_n_cells < 0, count_frac == 1, int_cov == "none")
 
-pb_n_sig_gene_data <- pb_data_files |>
-  filter(indiv_frac == 1) |>
-  filter(min_n_cells < 0) |>
-  filter(count_frac == 1) |>
-  filter(int_cov == "none") |>
-  rowwise() |>
-  mutate(
-    test = list(read_tsv(region_file, show_col_types = FALSE)),
-  ) |>
-  unnest(test) |>
-  select(pvalue, model, cell_type, feature_id, cell_frac) |>
-  left_join(
-    gene_prop_data |>
-      select(model, cell_type, feature_id, pb_mean),
-    by = c("cell_type", "feature_id", "model")
-  ) |>
-  summarise(
-    n_sig_gene = sum(p.adjust(pvalue[!is.na(pvalue)], method = "BH") < 0.05, na.rm = TRUE),
-    .by = c(cell_type, model, cell_frac)
+if (nrow(pb_gene_files) == 0) {
+  pb_n_sig_gene_data <- tibble(
+    cell_type = character(),
+    model = character(),
+    cell_frac = double(),
+    n_sig_gene = integer()
   )
+} else {
+  gene_prop_data <- pb_gene_files |>
+    rowwise() |>
+    mutate(gene_data = list(read_tsv(gene_prop_file, show_col_types = FALSE))) |>
+    unnest(gene_data) |>
+    distinct(feature_id, cell_type, model, .keep_all = TRUE)
+
+  pb_n_sig_gene_data <- pb_gene_files |>
+    rowwise() |>
+    mutate(test = list(read_tsv(region_file, show_col_types = FALSE))) |>
+    unnest(test) |>
+    select(pvalue, model, cell_type, feature_id, cell_frac) |>
+    left_join(
+      gene_prop_data |>
+        select(model, cell_type, feature_id, pb_mean),
+      by = c("cell_type", "feature_id", "model")
+    ) |>
+    summarise(
+      n_sig_gene = sum(p.adjust(pvalue[!is.na(pvalue)], method = "BH") < 0.05, na.rm = TRUE),
+      .by = c(cell_type, model, cell_frac)
+    )
+}
 
 sc_n_sig_var_data <- sc_data_files |>
   filter(indiv_frac == 1) |>
@@ -87,14 +89,23 @@ sc_n_sig_var_data <- sc_data_files |>
   unnest(n_sig_variant) |>
   summarise(n_sig_variant = sum(n_sig_variant), .by = c(cell_type, cell_frac, cov_spec, model))
 
-pb_n_sig_var_data <- pb_data_files |>
-  filter(indiv_frac == 1) |>
-  filter(min_n_cells < 0) |>
-  filter(count_frac == 1) |>
-  rowwise() |>
-  mutate(n_sig_variant = list(read_tsv(power_file, show_col_types = FALSE))) |>
-  unnest(n_sig_variant) |>
-  summarise(n_sig_variant = sum(n_sig_variant), .by = c(cell_type, model, cell_frac))
+pb_var_files <- pb_data_files |>
+  filter(indiv_frac == 1, min_n_cells < 0, count_frac == 1)
+
+if (nrow(pb_var_files) == 0) {
+  pb_n_sig_var_data <- tibble(
+    cell_type = character(),
+    model = character(),
+    cell_frac = double(),
+    n_sig_variant = integer()
+  )
+} else {
+  pb_n_sig_var_data <- pb_var_files |>
+    rowwise() |>
+    mutate(n_sig_variant = list(read_tsv(power_file, show_col_types = FALSE))) |>
+    unnest(n_sig_variant) |>
+    summarise(n_sig_variant = sum(n_sig_variant), .by = c(cell_type, model, cell_frac))
+}
 
 variant_plot_data <- bind_rows(
   pb_n_sig_var_data |>
@@ -215,5 +226,90 @@ ggsave(
   width = 12,
   height = 8
 )
+
+example_cell_types <- c("Plasma", "B_IN", "CD4_NC")
+example_cell_levels <- rev(unname(cell_type_lookup[c("CD4_NC", "B_IN", "Plasma")]))
+
+sc_pglmm_files <- sc_data_files |>
+  filter(cell_type %in% example_cell_types) |>
+  filter(cell_frac == 1, indiv_frac == 1, min_n_cells < 0, count_frac == 1) |>
+  filter(cov_spec == "bulk_pca", int_cov == "none", as.character(k) == "none") |>
+  filter(model == "p_glmm_sc") |>
+  filter(if ("data_type" %in% names(sc_data_files)) data_type == "counts" else TRUE) |>
+  mutate(ablate = if ("ablate" %in% names(sc_data_files)) coalesce(as.character(ablate), "none") else "none") |>
+  filter(ablate %in% c("none", ""))
+
+sc_pglmm_variants <- sc_pglmm_files |>
+  rowwise() |>
+  mutate(n_sig_variant = list(read_tsv(power_file, show_col_types = FALSE))) |>
+  unnest(n_sig_variant) |>
+  summarise(n_sig_variant = sum(n_sig_variant), .by = cell_type) |>
+  mutate(type = "sc-p_glmm_sc")
+
+sc_pglmm_genes <- sc_pglmm_files |>
+  rowwise() |>
+  mutate(test = list(read_tsv(region_file, show_col_types = FALSE))) |>
+  unnest(test) |>
+  summarise(
+    n_sig_gene = sum(p.adjust(pvalue, method = "BH") < 0.05, na.rm = TRUE),
+    .by = cell_type
+  ) |>
+  mutate(type = "sc-p_glmm_sc")
+
+saige_vs_quasar <- function(saige, quasar, value) {
+  bind_rows(
+    saige |> mutate(type = "saigeqtl"),
+    quasar
+  ) |>
+    filter(cell_type %in% example_cell_types) |>
+    mutate(
+      cell_type = factor(unname(cell_type_lookup[cell_type]), levels = example_cell_levels),
+      type = if_else(
+        type == "saigeqtl", "SAIGE-QTL", "Single-cell quasar P-GLMM"
+      ),
+      value = .data[[value]]
+    )
+}
+
+saige_vs_quasar_cols <- c(
+  "SAIGE-QTL" = method_col_lookup[["SAIGE-QTL"]],
+  "Single-cell quasar P-GLMM" = method_col_lookup[["Single-cell P-GLMM"]]
+)
+
+p_saige_variant <- saige_vs_quasar(saigeqtl_n_sig_var_data, sc_pglmm_variants, "n_sig_variant") |>
+  ggplot(aes(cell_type, value, fill = type)) +
+  geom_col(position = "dodge2") +
+  scale_fill_manual(
+    values = saige_vs_quasar_cols,
+    guide = guide_legend(reverse = TRUE)
+  ) +
+  scale_y_continuous(
+    labels = scales::label_number(scale_cut = scales::cut_short_scale())
+  ) +
+  labs(y = "Number of significant variants", x = "Cell type", fill = "Method") +
+  coord_flip() +
+  theme_jp_vgrid()
+
+p_saige_gene <- saige_vs_quasar(saigeqtl_n_sig_gene_data, sc_pglmm_genes, "n_sig_gene") |>
+  ggplot(aes(cell_type, value, fill = type)) +
+  geom_col(position = "dodge2") +
+  scale_fill_manual(values = saige_vs_quasar_cols) +
+  labs(y = "Number of significant genes", x = NULL, fill = "Method") +
+  coord_flip() +
+  theme_jp_vgrid() +
+  guides(fill = "none")
+
+p_saige_example <- p_saige_variant + p_saige_gene +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "top")
+
+ggsave(
+  "power-saigeqtl-vs-quasar-example-celltypes-plot.pdf",
+  plot = p_saige_example,
+  width = 12,
+  height = 5
+)
+
+saveRDS(p_saige_example, "power-saigeqtl-vs-quasar-example-celltypes-plot.rds")
 
 

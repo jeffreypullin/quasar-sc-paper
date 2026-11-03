@@ -136,7 +136,7 @@ process RUN_QUASAR_SC {
       --sc-pheno "$pheno_bed" \
       --anno "$anno" \
       --cov "$covs" \
-      --out                          "${base}" \
+      --out                                "${base}" \
       --model                                                                                                                                                                                                                                                                 ${info.model} \
       --mode cis \
       ${int_flag} \
@@ -145,6 +145,45 @@ process RUN_QUASAR_SC {
       --verbose
     gzip "${base}-quasar-cis-variant.txt"
     gzip "${base}-quasar-cis-region.txt"
+    """
+}
+
+process RUN_QUASAR_SC_GENO_PERM {
+    label "sc_quasar_perm"
+
+    input: tuple val(info), val(pheno_bed), val(covs), val(anno), val(plink_bed), val(cell_groups)
+    output: tuple val(info),
+        path("${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}${Utils.ablateSuffix(info)}-quasar-cis-region_perm_*.txt.gz"),
+        path("${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}${Utils.ablateSuffix(info)}-quasar-cis-variant_perm_*.txt.gz"),
+        path("${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}${Utils.ablateSuffix(info)}-time.txt")
+
+    script:
+    def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
+    def interaction_cov = info.interaction_cov ?: info.int_cov
+    def int_flag = (info.int_cov != "none" && info.k == "none") ? "-i '${interaction_cov}'" : ""
+    def cg_flag = (info.k != "none") ? "--cell-groups ${cell_groups}" : ""
+    def ablate_flag = info.ablate ? " --ablate-${info.ablate}" : ""
+    def base = "${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}${Utils.ablateSuffix(info)}"
+    // Five replicates, matching the previous FAM-shuffle permutation count.
+    def n_perm = 5
+    """
+    /usr/bin/time -p -o "${base}-time.txt" \
+      /home/jp2045/quasar/build/quasar \
+      --plink "$prefix" \
+      --sc-pheno "$pheno_bed" \
+      --anno "$anno" \
+      --cov "$covs" \
+      --out "${base}" \
+      --model ${info.model} \
+      --mode cis \
+      --permutation \
+      --n-perm ${n_perm} \
+      ${int_flag} \
+      ${cg_flag} \
+      ${ablate_flag} \
+      --verbose
+    gzip ${base}-quasar-cis-variant_perm_*.txt
+    gzip ${base}-quasar-cis-region_perm_*.txt
     """
 }
 

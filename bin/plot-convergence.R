@@ -5,112 +5,118 @@ suppressPackageStartupMessages({
   library(readr)
   library(data.table)
   library(ggplot2)
-  library(forcats)
   library(patchwork)
-  library(tidyr)
 })
+
+source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
 
 args <- commandArgs(trailingOnly = TRUE)
 
-pb_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
-  filter(int_cov == "none")
-sc_data_files <- read_tsv(args[2], show_col_types = FALSE) |>
-  filter(int_cov == "none") |>
-  filter(k == "none")
+sc_data_files <- read_tsv(args[2], show_col_types = FALSE)
 saigeqtl_data_files <- read_tsv(args[3], show_col_types = FALSE)
 
-saigeqtl_data_files
+example_cell_types <- c("Plasma", "B_IN", "CD4_NC")
+example_cell_levels <- rev(unname(cell_type_lookup[c("CD4_NC", "B_IN", "Plasma")]))
 
-2 + "fdsml"
+status_levels <- c("SAIGE-QTL result", "No SAIGE-QTL result")
 
-sc_n_na_data <- sc_data_files |>
-  filter(cell_frac == 1) |>
-  filter(indiv_frac == 1) |>
-  rowwise() |>
-  mutate(n_na = read_tsv(conv_file, show_col_types = FALSE) |>
-    filter(is.na(pvalue)) |>
-    nrow()) |>
-  ungroup() |>
-  summarise(n_na = sum(n_na), .by = cell_type)
+sc_files <- sc_data_files |>
+  filter(cell_type %in% example_cell_types) |>
+  filter(cell_frac == 1, indiv_frac == 1, min_n_cells < 0, count_frac == 1) |>
+  filter(cov_spec == "bulk_pca", int_cov == "none", as.character(k) == "none") |>
+  filter(model == "p_glmm_sc") |>
+  filter(if ("data_type" %in% names(sc_data_files)) data_type == "counts" else TRUE) |>
+  mutate(ablate = if ("ablate" %in% names(sc_data_files)) coalesce(as.character(ablate), "none") else "none") |>
+  filter(ablate %in% c("none", ""))
 
-pb_n_na_data <- pb_data_files |>
-  filter(cell_frac == 1) |>
-  filter(indiv_frac == 1) |>
-  rowwise() |>
-  mutate(n_na = read_tsv(conv_file, show_col_types = FALSE) |>
-    filter(is.na(pvalue)) |>
-    nrow()) |>
-  ungroup() |>
-  summarise(n_na = sum(n_na), .by = c(cell_type, model))
+read_quasar_genes <- function(files) {
+  lapply(files, \(f) read_tsv(f, show_col_types = FALSE) |> select(feature_id, pvalue)) |>
+    bind_rows() |>
+    distinct(feature_id, .keep_all = TRUE)
+}
 
-saigeqtl_n_na_data <- saigeqtl_data_files |>
-  rowwise() |>
-  mutate(n_na = count_na_variant_files(error_genes)) |>
-  ungroup() |>
-  summarise(n_na = sum(n_na), .by = cell_type)
+read_saige_genes <- function(files) {
+  files <- files[!is.na(files) & files != "NA"]
+  lapply(files, \(f) read_tsv(f, show_col_types = FALSE) |> select(gene)) |>
+    bind_rows() |>
+    distinct(gene) |>
+    pull(gene)
+}
 
-sc_n_non_converged_data <- sc_data_files |>
-  filter(cell_frac == 1) |>
-  filter(indiv_frac == 1) |>
-  rowwise() |>
-  mutate(n_non_converged = read_tsv(conv_file, show_col_types = FALSE) |>
-    filter(glmm_converged == 0) |>
-    nrow()) |>
-  ungroup() |>
-  summarise(n_non_converged = sum(n_non_converged), .by = cell_type)
+gene_data <- lapply(example_cell_types, function(ct) {
+  quasar_genes <- read_quasar_genes(sc_files |> filter(cell_type == ct) |> pull(region_file))
+  saige_genes <- read_saige_genes(saigeqtl_data_files |> filter(cell_type == ct) |> pull(region_file))
 
-pb_n_non_converged_data <- pb_data_files |>
-  filter(cell_frac == 1) |>
-  filter(indiv_frac == 1) |>
-  filter(model == "nb_glm") |>
-  rowwise() |>
-  mutate(n_non_converged = read_tsv(conv_file, show_col_types = FALSE) |>
-    filter(glm_converged == 0) |>
-    nrow()) |>
-  ungroup() |>
-  summarise(n_non_converged = sum(n_non_converged), .by = c(cell_type, model))
+  quasar_genes |>
+    mutate(
+      cell_type = ct,
+      status = if_else(feature_id %in% saige_genes, "SAIGE-QTL result", "No SAIGE-QTL result")
+    )
+}) |>
+  bind_rows() |>
+  mutate(
+    cell_type = factor(unname(cell_type_lookup[cell_type]), levels = example_cell_levels),
+    status = factor(status, levels = status_levels)
+  )
 
-p_na <- bind_rows(
-  pb_n_na_data |>
-    mutate(type = paste0("pb-", model)),
-  sc_n_na_data |>
-    mutate(type = "sc"),
-  saigeqtl_n_na_data |>
-    mutate(type = "saigeqtl")
-) |>
-  mutate(cell_type = fct_reorder(factor(cell_type), n_na)) |>
-  ggplot(aes(cell_type, n_na, fill = type)) +
-  geom_col(position = "dodge2") +
-  coord_flip()
+fail_data <- tibble(cell_type = factor(example_cell_levels, levels = example_cell_levels)) |>
+  left_join(
+    gene_data |>
+      filter(status == "No SAIGE-QTL result") |>
+      count(cell_type, name = "n_gene"),
+    by = "cell_type"
+  ) |>
+  mutate(n_gene = coalesce(n_gene, 0L))
 
-p_zero <- bind_rows(
-  pb_n_zero_data |>
-    mutate(type = paste0("pb-", model)),
-  sc_n_zero_data |>
-    mutate(type = "sc")
-) |>
-  mutate(cell_type = fct_reorder(factor(cell_type), n_zero)) |>
-  ggplot(aes(cell_type, n_zero, fill = type)) +
-  geom_col(position = "dodge2") +
-  coord_flip()
+p_fail <- fail_data |>
+  ggplot(aes(cell_type, n_gene)) +
+  geom_col(width = 0.7, fill = "grey35") +
+  labs(
+    x = "Cell type",
+    y = "Non-converging SAIGE-QTL genes"
+  ) +
+  coord_flip() +
+  theme_jp_vgrid()
 
-p_non_converged <- bind_rows(
-  pb_n_non_converged_data |>
-    mutate(type = paste0("pb-", model)),
-  sc_n_non_converged_data |>
-    mutate(type = "sc")
-) |>
-  mutate(cell_type = fct_reorder(factor(cell_type), n_non_converged)) |>
-  ggplot(aes(cell_type, n_non_converged, fill = type)) +
-  geom_col(position = "dodge2") +
-  coord_flip()
+n_sig_in_missing <- function(files, missing) {
+  if (length(missing) == 0) {
+    return(0)
+  }
+  sum(vapply(files, function(f) {
+    x <- fread(f, select = c("feature_id", "pvalue"))
+    sum(x$feature_id %in% missing & x$pvalue < 5e-6, na.rm = TRUE)
+  }, numeric(1)))
+}
 
-p <- p_na + p_zero + p_non_converged +
-  plot_layout(guides = "collect")
+variant_data <- lapply(example_cell_types, function(ct) {
+  missing <- gene_data |>
+    filter(cell_type == cell_type_lookup[[ct]], status == "No SAIGE-QTL result") |>
+    pull(feature_id)
+  tibble(
+    cell_type = unname(cell_type_lookup[[ct]]),
+    n_sig_variant = n_sig_in_missing(
+      sc_files |> filter(cell_type == ct) |> pull(variant_file),
+      missing
+    )
+  )
+}) |>
+  bind_rows() |>
+  mutate(cell_type = factor(cell_type, levels = example_cell_levels))
+
+p_var <- variant_data |>
+  ggplot(aes(cell_type, n_sig_variant)) +
+  geom_col(width = 0.7, fill = "grey35") +
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale())) +
+  labs(
+    x = NULL,
+    y = "Significant variants in genes\nwith no SAIGE-QTL result"
+  ) +
+  coord_flip() +
+  theme_jp_vgrid()
 
 ggsave(
-  "convergence-plot.pdf",
-  plot = p,
-  width = 8,
-  height = 6
+  "convergence-saigeqtl-vs-quasar-example-celltypes-plot.pdf",
+  plot = p_fail + p_var,
+  width = 12,
+  height = 5
 )

@@ -8,7 +8,6 @@ workflow COLLECT_MANIFESTS {
     seacells_sizes
     sc_quasar_gwas
     pb_quasar_gwas
-    csaqtl_quasar
     pc_gwas
     pc_sc_gwas
     sc_quasar_gwas_perm
@@ -87,15 +86,6 @@ workflow COLLECT_MANIFESTS {
             }
         )
         .collectFile(name: 'pb_quasar_gwas_file', newLine: true, sort: false)
-
-    csaqtl_quasar_file = Channel
-        .of("dataset\tcell_type\tgrouping\tgeno_chr\tsig_variant_file\ttime_file\tn_variants")
-        .concat(csaqtl_quasar
-            .map { info, sig_variant_file, time_file, n_variants_file ->
-                "${info.dataset}\t${info.cell_type}\t${info.grouping}\t${info.chr}\t${sig_variant_file}\t${time_file}\t${n_variants_file}"
-            }
-        )
-        .collectFile(name: 'csaqtl_quasar_file', newLine: true, sort: false)
 
     pc_gwas_file = Channel
         .of("dataset\tcell_type\tmodel\tsig_variant_file\ttime_file\tn_variants")
@@ -204,7 +194,6 @@ workflow COLLECT_MANIFESTS {
     seacells_file
     sc_quasar_gwas_file
     pb_quasar_gwas_file
-    csaqtl_quasar_file
     pc_gwas_file
     pc_sc_gwas_file
     sc_quasar_gwas_perm_file

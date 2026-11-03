@@ -13,10 +13,10 @@ theme_jp <- function() {
 
   theme(
     plot.title = element_text(
-      family =  "Helvetica", size = 18, color = "#222222"
+      family =  "Helvetica", size = 22, color = "#222222"
     ),
     plot.subtitle = element_text(
-      family = font, size = 14, margin = ggplot2::margin(0, 0, 10, 0)
+      family = font, size = 16, margin = ggplot2::margin(0, 0, 10, 0)
     ),
     plot.caption = element_blank(),
     plot.title.position = "plot",
@@ -25,9 +25,10 @@ theme_jp <- function() {
     legend.background = element_blank(),
     legend.title = element_blank(),
     legend.key = element_blank(),
-    legend.text = element_text(family = font, size = 12, color = "#222222", hjust = 0),
-    axis.title = element_text(family = font, size = 12, color = "#222222"),
-    axis.text = element_text(family = font, size = 11, color = "#222222"),
+    legend.text = element_text(family = font, size = 16, color = "#222222", hjust = 0),
+    legend.key.size = unit(0.7, "cm"),
+    axis.title = element_text(family = font, size = 18, color = "#222222"),
+    axis.text = element_text(family = font, size = 16, color = "#222222"),
     axis.ticks = element_blank(),
     axis.line = element_blank(),
     panel.grid.major.y = element_line(color = "#cbcbcb"),
@@ -36,7 +37,7 @@ theme_jp <- function() {
     panel.grid.minor.x = element_blank(),
     panel.background = element_blank(),
     strip.background = element_rect(fill = "white"),
-    strip.text = element_text(family = font, size = 12)
+    strip.text = element_text(family = font, size = 16)
   )
 }
 
@@ -49,7 +50,6 @@ theme_jp_vgrid <- function() {
       panel.grid.minor.y = element_blank(),
     )
 }
-
 method_lookup <- c(
   "saigeqtl" = "SAIGE-QTL",
   "castie" = "CASTIE",
@@ -73,14 +73,14 @@ method_lookup <- c(
 )
 
 method_col_lookup <- c(
-  "SAIGE-QTL" = "#EE7733",
+  "SAIGE-QTL" = "#0072B2",
   "CASTIE" = "#332288",
   "Pseudobulk LM" = "#AA4499",
   "Pseudobulk NB-GLM" = "#DDCC77",
   "Pseudobulk P-GLMM" = "#117733",
   "Pseudobulk P-GLMM (iid)" = "#999933",
-  "Single-cell P-GLMM" = "#882255",
-  "Single-cell P-GLMM (no donor totals)" = "#CC6677",
+  "Single-cell P-GLMM" = "#4DAF4A",
+  "Single-cell P-GLMM (no donor totals)" = "#A1D99B",
   "Single-cell LMM" = "#44AA99",
   "Pseudobulk LM with cell weights" = "#88CCEE",
   "TensorQTL" = "#0077BB"

@@ -142,7 +142,7 @@ plot_perm_nz_frac <- function(plot_data, model_label, out_file) {
 }
 
 build_sc_plot_data <- function(model_name) {
-  sc_data_files |>
+  manifest <- sc_data_files |>
     filter(
       dataset == "tremor",
       model == model_name,
@@ -151,7 +151,10 @@ build_sc_plot_data <- function(model_name) {
       cell_frac == 1,
       indiv_frac == 1,
       count_frac == 1
-    ) |>
+    )
+  if (nrow(manifest) == 0) return(tibble())
+
+  manifest |>
     summarise(
       file_list = list(variant_file),
       prop_file = first(prop_file),
@@ -192,6 +195,7 @@ for (model_name in models) {
   } else {
     build_pb_plot_data(model_name)
   }
+  if (nrow(plot_data) == 0) next
 
   plot_perm_nz_frac(
     plot_data,

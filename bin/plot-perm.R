@@ -166,40 +166,68 @@ overall_plot_data <- sc_data_files |>
   select(-file_list) |>
   unnest(cols = qq_data)
 
-ct_levels <- unname(cell_type_lookup[
-  names(cell_type_lookup) %in% unique(overall_plot_data$cell_type)
-])
-model_levels <- unique(unname(method_lookup[c("p_glmm_sc", "lmm_sc")]))
+example_cell_types <- c("Plasma", "B_IN", "CD4_NC")
 
-overall_p <- overall_plot_data |>
-  filter(cell_type %in% names(cell_type_lookup)) |>
-  filter(model %in% names(method_lookup)) |>
-  mutate(
-    cell_type = factor(unname(cell_type_lookup[cell_type]), levels = ct_levels),
-    model = factor(method_lookup[model], levels = model_levels)
-  ) |>
-  ggplot(aes(log_x_bin_mid, log_y_pvalue,
-             ymin = log_lower_ci, ymax = log_upper_ci,
-             colour = model, fill = model)) +
-  geom_point(alpha = 0.8) +
-  geom_abline(linetype = "dashed") +
-  geom_ribbon(linetype = 2, alpha = 0.1) +
-  scale_colour_manual(values = method_col_lookup, drop = TRUE) +
-  scale_fill_manual(values = method_col_lookup, drop = TRUE) +
-  facet_grid(vars(dataset_label), vars(cell_type)) +
-  labs(
-    x = "Expected -log10(p-value)",
-    y = "Observed -log10(p-value)",
-    colour = "Model",
-    fill = "Model"
-  ) +
-  theme_jp()
+qq_plot <- function(plot_data, facets, title = NULL) {
+  ct_levels <- unname(cell_type_lookup[
+    names(cell_type_lookup) %in% unique(plot_data$cell_type)
+  ])
+  ct_cols <- cell_type_cols[names(cell_type_lookup)]
+  names(ct_cols) <- unname(cell_type_lookup)
+
+  plot_data |>
+    filter(cell_type %in% names(cell_type_lookup)) |>
+    filter(model %in% names(method_lookup)) |>
+    mutate(
+      cell_type = factor(unname(cell_type_lookup[cell_type]), levels = ct_levels)
+    ) |>
+    ggplot(aes(log_x_bin_mid, log_y_pvalue,
+               ymin = log_lower_ci, ymax = log_upper_ci,
+               colour = cell_type, fill = cell_type)) +
+    geom_point(alpha = 0.8) +
+    geom_abline(linetype = "dashed") +
+    geom_ribbon(linetype = 2, alpha = 0.1) +
+    scale_colour_manual(values = ct_cols, drop = TRUE) +
+    scale_fill_manual(values = ct_cols, drop = TRUE) +
+    facets +
+    labs(
+      title = title,
+      x = "Expected -log10(p-value)",
+      y = "Observed -log10(p-value)",
+      colour = "Cell type",
+      fill = "Cell type"
+    ) +
+    theme_jp() +
+    theme(legend.position = "none")
+}
+
+example_plot_data <- overall_plot_data |>
+  filter(cell_type %in% example_cell_types)
+
+example_plot <- qq_plot(example_plot_data, facet_wrap(vars(cell_type), nrow = 1))
 
 ggsave(
-  "perm-sc-p_glmm_sc-plot.pdf",
-  overall_p,
-  width = 15,
-  height = 7
+  "perm-sc-p_glmm_sc-example-celltypes-plot.pdf",
+  example_plot,
+  width = 10,
+  height = 4.5
+)
+
+saveRDS(example_plot, "perm-sc-p_glmm_sc-example-celltypes-plot.rds")
+
+n_panels <- n_distinct(overall_plot_data$cell_type)
+n_cols <- min(7L, n_panels)
+n_rows <- ceiling(n_panels / n_cols)
+
+ggsave(
+  "perm-sc-p_glmm_sc-all-celltypes-plot.pdf",
+  qq_plot(
+    overall_plot_data,
+    facet_wrap(vars(cell_type), ncol = n_cols),
+    title = "OneK1K"
+  ),
+  width = 2.6 * n_cols + 1.5,
+  height = 2.8 * n_rows + 1.2
 )
 
 #prop_plot_data <- sc_data_files |>

@@ -15,7 +15,6 @@ args <- commandArgs(trailingOnly = TRUE)
 
 pb_data_files <- read_tsv(args[1], show_col_types = FALSE)
 sc_data_files <- read_tsv(args[2], show_col_types = FALSE)
-saigeqtl_data_files <- read_tsv(args[3], show_col_types = FALSE)
 
 sc_genes <- sc_data_files |>
   filter(cell_frac == 1) |>
@@ -34,14 +33,6 @@ pb_genes <- pb_data_files |>
   mutate(gene_tbl = list(read_tsv(region_file, show_col_types = FALSE))) |>
   unnest(gene_tbl) |>
   ungroup()
-
-#saigeqtl_genes <- saigeqtl_data_files |>
-#  mutate(method = "saigeqtl") |>
-#  rowwise() |>
-#  mutate(gene_tbl = list(read_tsv(region_file))) |>
-#  rename(pvalue = ACAT_p) |>
-#  unnest(gene_tbl) |>
-#  ungroup()
 
 all_genes <- bind_rows(
   sc_genes,
@@ -68,7 +59,7 @@ p <- upset_df |>
   labs(x = NULL, y = "Number of significant genes")
 
 ggsave(
-  "concordance-plot.pdf",
+  "concordance-upset-plot.pdf",
   p,
   width = 8,
   height = 6
@@ -141,7 +132,7 @@ p_lm_pglmm <- upset_lm_pglmm |>
 
 n_facet <- n_distinct(upset_lm_pglmm$cell_type_label)
 ggsave(
-  "concordance-lm-p_glmm_sc-plot.pdf",
+  "concordance-lm-p_glmm_sc-upset-plot.pdf",
   p_lm_pglmm,
   width = max(8, 4 * n_facet),
   height = 6,

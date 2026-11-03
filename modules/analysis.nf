@@ -6,9 +6,11 @@ process PLOT_POWER {
         val pb_quasar_file
         val sc_quasar_file
         val saigeqtl_file
-    output: tuple path("power-method-comparison-plot.pdf"), 
+    output: tuple path("power-method-comparison-plot.pdf"),
         path("power-frac-plot.pdf"),
-        path("power-sc-non-zero-frac-plot.pdf")
+        path("power-sc-non-zero-frac-plot.pdf"),
+        path("power-saigeqtl-vs-quasar-example-celltypes-plot.pdf")
+    path "power-saigeqtl-vs-quasar-example-celltypes-plot.rds", emit: figure2
 
     script:
     """
@@ -132,7 +134,7 @@ process PLOT_CONVERGENCE {
         val pb_quasar_file
         val sc_quasar_file
         val saigeqtl_file
-    output: path("convergence-plot.pdf")
+    output: path("convergence-saigeqtl-vs-quasar-example-celltypes-plot.pdf")
 
     script:
     """
@@ -145,7 +147,10 @@ process PLOT_PERM_SC {
     publishDir "output"
 
     input: val perm_sc_quasar_file
-    output: path("perm-sc-p_glmm_sc-plot.pdf")
+    output:
+        path("perm-sc-p_glmm_sc-example-celltypes-plot.pdf")
+        path("perm-sc-p_glmm_sc-all-celltypes-plot.pdf")
+        path "perm-sc-p_glmm_sc-example-celltypes-plot.rds", emit: figure2
 
     script:
     """
@@ -552,18 +557,6 @@ process PLOT_GWAS_OUTPUT {
     """
 }
 
-process PLOT_CSAQTL_OUTPUT {
-    publishDir "output"
-
-    input: val csaqtl_quasar_file
-    output: path("csaqtl-output-plot.pdf")
-
-    script:
-    """
-    plot-csaqtl-output.R $csaqtl_quasar_file
-    """
-}
-
 process PLOT_PC_GWAS_OUTPUT {
     label "high_mem"
     publishDir "output"
@@ -635,19 +628,22 @@ process PLOT_ZSCORE_SCATTER {
     """
 }
 
-process PLOT_METHOD_SCATTER {
+process PLOT_CONCORDANCE_SCATTER {
     publishDir "output"
     label "high_mem"
 
     input:
         val pb_quasar_file
         val sc_quasar_file
+        val saigeqtl_file
     output:
-        path("method-scatter-plot.pdf")
+        path("concordance-saigeqtl-p_glmm_sc-scatter.pdf")
+        path("concordance-lm-p_glmm_sc-scatter.pdf"), optional: true
+        path "concordance-saigeqtl-p_glmm_sc-scatter.rds", emit: figure2
 
     script:
     """
-    plot-method-scatter.R $pb_quasar_file $sc_quasar_file
+    plot-concordance-scatter.R $pb_quasar_file $sc_quasar_file $saigeqtl_file
     """
 }
 
@@ -705,11 +701,30 @@ process PLOT_TIME {
         val saigeqtl_file
     output: tuple path("time-quasar-plot.pdf"),
         path("time-method-comparison-plot.pdf"),
-        path("time-frac-plot.pdf")
+        path("time-frac-plot.pdf"),
+        path("time-saigeqtl-vs-quasar-example-celltypes-plot.pdf")
+    path "time-saigeqtl-vs-quasar-example-celltypes-plot.rds", emit: figure2
 
     script:
     """
     plot-time.R $pb_quasar_file $sc_quasar_file $saigeqtl_file
+    """
+}
+
+process PLOT_FIGURE_2 {
+    publishDir "output"
+
+    input:
+        path perm_plot
+        path concordance_plot
+        path power_plot
+        path time_plot
+    output:
+        path "figure-2.pdf"
+
+    script:
+    """
+    plot-figure-2.R $perm_plot $concordance_plot $power_plot $time_plot
     """
 }
 
@@ -728,19 +743,18 @@ process PLOT_TIME_QUASAR {
     """
 }
 
-process PLOT_CONCORDANCE {
+process PLOT_CONCORDANCE_UPSET {
     publishDir "output"
 
-    input: 
+    input:
         val pb_quasar_file
         val sc_quasar_file
-        val saigeqtl_file
-    output: tuple path("concordance-plot.pdf"),
-        path("concordance-lm-p_glmm_sc-plot.pdf")
+    output: tuple path("concordance-upset-plot.pdf"),
+        path("concordance-lm-p_glmm_sc-upset-plot.pdf")
 
     script:
     """
-    plot-concordance.R $pb_quasar_file $sc_quasar_file $saigeqtl_file
+    plot-concordance-upset.R $pb_quasar_file $sc_quasar_file
     """
 }
 
@@ -1105,9 +1119,7 @@ process PLOT_TREMOR_PERM_NZ_FRAC {
         val perm_sc_quasar_file
         val perm_pb_quasar_file
     output:
-        tuple path("tremor-perm-nz-frac-lm-plot.pdf"),
-              path("tremor-perm-nz-frac-p_glmm_sc-plot.pdf"),
-              path("tremor-perm-nz-frac-lmm_sc-plot.pdf")
+        path "tremor-perm-nz-frac-*-plot.pdf"
 
     script:
     """

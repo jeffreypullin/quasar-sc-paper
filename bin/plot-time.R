@@ -152,3 +152,48 @@ ggsave(
   width = 12,
   height = 10
 )
+
+# SAIGE-QTL vs quasar single-cell P-GLMM fitted without donor totals.
+saigeqtl_ablate_p <- plot_data |>
+  filter(cell_frac == 1) |>
+  filter(indiv_frac == 1) |>
+  filter(cell_type %in% c("Plasma", "B_IN", "CD4_NC")) |>
+  filter(type %in% c("saigeqtl", "sc-p_glmm_sc_ablate")) |>
+  mutate(
+    cell_type = factor(
+      cell_type_lookup[cell_type],
+      levels = cell_type_lookup[c("CD4_NC", "B_IN", "Plasma")]
+    ),
+    type = if_else(
+      type == "saigeqtl", "SAIGE-QTL", "Single-cell quasar P-GLMM"
+    )
+  ) |>
+  mutate(
+    cell_type = fct_reorder(cell_type, time, .fun = max),
+    type = fct_reorder(factor(type), time, .fun = sum),
+    hours = time / (60 * 60)
+  ) |>
+  ggplot(aes(cell_type, hours, fill = type)) +
+  geom_col(position = "dodge2") +
+  coord_flip() +
+  labs(
+    x = "Cell type",
+    y = "Time (h)",
+    fill = "Method"
+  ) +
+  scale_fill_manual(
+    values = c(
+      "SAIGE-QTL" = method_col_lookup[["SAIGE-QTL"]],
+      "Single-cell quasar P-GLMM" = method_col_lookup[["Single-cell P-GLMM"]]
+    )
+  ) +
+  theme_jp_vgrid()
+
+ggsave(
+  "time-saigeqtl-vs-quasar-example-celltypes-plot.pdf",
+  saigeqtl_ablate_p,
+  width = 10,
+  height = 6
+)
+
+saveRDS(saigeqtl_ablate_p, "time-saigeqtl-vs-quasar-example-celltypes-plot.rds")

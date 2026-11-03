@@ -3,11 +3,11 @@ include {
     PLOT_PERM_CELL_FRAC ; PLOT_PERM_CELL_FRAC_MIN_CELLS ; PLOT_PERM_CELL_FRAC_DONOR_SPARSITY ;
     PLOT_PERM_COUNT_FRAC ;
     PLOT_PERM_DONOR_SUBSAMPLE ; PLOT_PERM_PB ;
-    PLOT_TIME ; PLOT_TIME_QUASAR ; PLOT_CONCORDANCE ; PLOT_UNIQUE_SC_EGENES ;
+    PLOT_TIME ; PLOT_FIGURE_2 ; PLOT_TIME_QUASAR ; PLOT_CONCORDANCE_UPSET ; PLOT_CONCORDANCE_SCATTER ; PLOT_UNIQUE_SC_EGENES ;
     PLOT_UNIQUE_PB_EGENES ; PLOT_EGENE_SIG_MODEL ; PLOT_POWER_CELL_FRAC ;
     PLOT_CELL_SUBSAMPLE_TIME ; PLOT_DONOR_SUBSAMPLE_TIME ; PLOT_TIME_NCELLS_SCATTER ;
     PLOT_POWER_COUNT_FRAC ; PLOT_POWER_INDIV_FRAC ; PLOT_POWER_BOTH_FRAC ;
-    PLOT_POWER_GENE_PROP ; PLOT_METHOD_SCATTER ; PLOT_GENE_PROPERTIES ;
+    PLOT_POWER_GENE_PROP ; PLOT_GENE_PROPERTIES ;
     PLOT_PERM_INT ; PLOT_INT_OUTPUT ; PLOT_GWAS_OUTPUT ; PLOT_PERM_GLOBAL ;
     PLOT_PERM_GWAS ; PLOT_PVALUE_SCATTER ; PLOT_MAIN_VS_INT ;
     PLOT_INT_TIME ; PLOT_QUASAR_INT_TIME ; PLOT_SC_INT_OUTPUT ;
@@ -16,7 +16,7 @@ include {
     PLOT_GROUPED_SC_OUTPUT ; PLOT_GROUPED_VS_INT ; PLOT_GROUPED_INT_TIME ;
     PLOT_SC_PGLMM_VS_LMM ; PLOT_PERM_SC_INT_GLOBAL ; PLOT_SC_INT_FIGURES ;
     PLOT_UNIQUE_SC_EGENE_FIGURES ; PLOT_UNIQUE_PB_EGENE_FIGURES ;
-    PLOT_METACELL_OUTPUT ; PLOT_CSAQTL_OUTPUT ; PLOT_PC_GWAS_OUTPUT ;
+    PLOT_METACELL_OUTPUT ; PLOT_PC_GWAS_OUTPUT ;
     PLOT_PC_GWAS_COMPARISON ; RUN_COLOC ; PLOT_CELLS_PER_INDIV ;
     PLOT_POWER_OFFSET ; PLOT_ZSCORE_SCATTER ;
     PLOT_TREMOR_TENSORQTL ; PLOT_TREMOR_POWER_QUASAR ; PLOT_TREMOR_PERM_NZ_FRAC ;
@@ -34,7 +34,6 @@ workflow RUN_PLOTS {
     seacells_file
     sc_quasar_gwas_file
     pb_quasar_gwas_file
-    csaqtl_quasar_file
     pc_gwas_file
     pc_sc_gwas_file
     sc_quasar_gwas_perm_file
@@ -60,7 +59,7 @@ workflow RUN_PLOTS {
 
     main:
     // PLOT_CLUMPED(clumped_pb_quasar_file, clumped_sc_quasar_file)
-    // PLOT_POWER(pb_quasar_file, sc_quasar_file, saigeqtl_file)
+    PLOT_POWER(pb_quasar_file, sc_quasar_file, saigeqtl_file)
     //PLOT_ABLATE_DONOR_TOTALS(sc_quasar_file)
     // PLOT_POWER_QUASAR(pb_quasar_file, sc_quasar_file)
     // PLOT_CELLS_PER_INDIV(
@@ -78,20 +77,20 @@ workflow RUN_PLOTS {
     //PLOT_POWER_OFFSET(sc_offset_quasar_file)
     // unique_egenes_tsv = PLOT_UNIQUE_SC_EGENES(pb_quasar_file, sc_quasar_file)
     // PLOT_EGENE_SIG_MODEL(pb_quasar_file, sc_quasar_file)
-    PLOT_POWER_CELL_FRAC(pb_quasar_file, sc_quasar_file)
+    //PLOT_POWER_CELL_FRAC(pb_quasar_file, sc_quasar_file)
     // TEMP: disabled with joint downsampling
     // PLOT_POWER_BOTH_FRAC(pb_quasar_file, sc_quasar_file)
     //PLOT_POWER_COUNT_FRAC(pb_quasar_file, sc_quasar_file)
-    PLOT_POWER_INDIV_FRAC(pb_quasar_file, sc_quasar_file)
-    gene_filter_stats
-        .multiMap { _dataset, stats, donor ->
-            stats: stats
-            donor: donor
-        }
-        .set { gene_filter_parts }
-    PLOT_GENE_FILTER_INTERSECTION(gene_filter_parts.stats, gene_filter_parts.donor)
+    //PLOT_POWER_INDIV_FRAC(pb_quasar_file, sc_quasar_file)
+    // gene_filter_stats
+    //     .multiMap { _dataset, stats, donor ->
+    //         stats: stats
+    //         donor: donor
+    //     }
+    //     .set { gene_filter_parts }
+    // PLOT_GENE_FILTER_INTERSECTION(gene_filter_parts.stats, gene_filter_parts.donor)
     // PLOT_POWER_GENE_PROP(pb_quasar_file, sc_quasar_file)
-    // PLOT_METHOD_SCATTER(pb_quasar_file, sc_quasar_file)
+    // PLOT_CONCORDANCE_UPSET(pb_quasar_file, sc_quasar_file)
 
     // unique_genotype_dosages = EXTRACT_GENOTYPES(
     //     all_bed.combine(unique_egenes_tsv)
@@ -129,49 +128,50 @@ workflow RUN_PLOTS {
     // PLOT_UNIQUE_PB_EGENE_FIGURES(unique_pb_egene_figures_input)
 
     // PLOT_POWER_COVS(sc_quasar_file)
-    // PLOT_CONVERGENCE(pb_quasar_file, sc_quasar_file, saigeqtl_file)
-    // PLOT_PERM_SC(perm_sc_quasar_file)
-    PLOT_PERM_CELL_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
-    PLOT_PERM_CELL_FRAC_MIN_CELLS(perm_sc_quasar_file, skipped_combos_file)
-    PLOT_PERM_CELL_FRAC_DONOR_SPARSITY(perm_sc_quasar_file)
+    PLOT_CONVERGENCE(pb_quasar_file, sc_quasar_file, saigeqtl_file)
+    PLOT_PERM_SC(perm_sc_quasar_file)
+    //PLOT_PERM_CELL_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
+    //PLOT_PERM_CELL_FRAC_MIN_CELLS(perm_sc_quasar_file, skipped_combos_file)
+    //PLOT_PERM_CELL_FRAC_DONOR_SPARSITY(perm_sc_quasar_file)
     // PLOT_PERM_COUNT_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
-    cluster_sizes
-        .map { _dataset, _sizes, cells_per_indiv -> cells_per_indiv }
-        .multiMap { cells_per_indiv ->
-            donor_subsample: cells_per_indiv
-            prop_n_cells: cells_per_indiv
-        }
-        .set { cells_per_indiv_ch }
-    PLOT_PERM_DONOR_SUBSAMPLE(
-         perm_sc_quasar_file,
-         perm_pb_quasar_file,
-         sc_quasar_file,
-         cells_per_indiv_ch.donor_subsample
-    )
-    // PLOT_PERM_PB(perm_pb_quasar_file)
-    PLOT_PROP_N_CELLS(
-        perm_sc_quasar_file,
-        cells_per_indiv_ch.prop_n_cells
-    )
+    // cluster_sizes
+    //     .map { _dataset, _sizes, cells_per_indiv -> cells_per_indiv }
+    //     .multiMap { cells_per_indiv ->
+    //         donor_subsample: cells_per_indiv
+    //         prop_n_cells: cells_per_indiv
+    //     }
+    //     .set { cells_per_indiv_ch }
+    // PLOT_PERM_DONOR_SUBSAMPLE(
+    //      perm_sc_quasar_file,
+    //      perm_pb_quasar_file,
+    //      sc_quasar_file,
+    //      cells_per_indiv_ch.donor_subsample
+    // )
+    //PLOT_PERM_PB(perm_pb_quasar_file)
+    // PLOT_PROP_N_CELLS(
+    //     perm_sc_quasar_file,
+    //     cells_per_indiv_ch.prop_n_cells
+    // )
 
-    // if ("tremor" in active_datasets) {
-    //     tremor_plot_files = tremor_tensorqtl_compare
-    //         .map { dataset, cell_type, sample, summary -> tuple(sample, summary) }
-    //         .toList()
-    //         .filter { it.size() > 0 }
-    //         .map { pairs ->
-    //             tuple(
-    //                 pairs.collect { it[0] },
-    //                 pairs.collect { it[1] }
-    //             )
-    //         }
-    //     PLOT_TREMOR_TENSORQTL(
-    //         tremor_plot_files.map { samples, summaries -> samples },
-    //         tremor_plot_files.map { samples, summaries -> summaries }
-    //     )
-    //     PLOT_TREMOR_POWER_QUASAR(pb_quasar_file, sc_quasar_file)
-    //     PLOT_TREMOR_PERM_NZ_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
-    // }
+    if ("tremor" in active_datasets) {
+        tremor_plot_files = tremor_tensorqtl_compare
+            .map { dataset, cell_type, sample, summary -> tuple(sample, summary) }
+            .toList()
+            .filter { it.size() > 0 }
+            .map { pairs ->
+                tuple(
+                    pairs.collect { it[0] },
+                    pairs.collect { it[1] }
+                )
+            }
+        PLOT_TREMOR_TENSORQTL(
+            tremor_plot_files.map { samples, summaries -> samples },
+            tremor_plot_files.map { samples, summaries -> summaries }
+        )
+        // TEMP: the power comparison needs the single-cell QuASAR runs.
+        // PLOT_TREMOR_POWER_QUASAR(pb_quasar_file, sc_quasar_file)
+        PLOT_TREMOR_PERM_NZ_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
+    }
 
     // qc_files = dataset_qc
     //     .toList()
@@ -240,7 +240,6 @@ workflow RUN_PLOTS {
     //     .map { _dataset, info, ex, covs, logcounts, geno -> tuple(info, ex, covs, logcounts, geno) }
     // PLOT_SC_INT_FIGURES(sc_int_figures_input)
     // PLOT_METACELL_OUTPUT(sc_quasar_file, seacells_file)
-    // PLOT_CSAQTL_OUTPUT(csaqtl_quasar_file)
     // PLOT_PC_GWAS_OUTPUT(pc_gwas_file, pc_sc_gwas_file)
     // PLOT_PERM_SC_INT_WITHIN(sc_quasar_perm_int_within_file)
     // PLOT_PERM_SC_INT_LOGCOUNT_BINS(sc_quasar_perm_int_logcount_file)
@@ -249,10 +248,16 @@ workflow RUN_PLOTS {
     //         .mix(PLOT_PERM_SC_INT.out.qq, PLOT_PERM_SC_INT_WITHIN.out.qq)
     //         .collect()
     // )
-    // PLOT_TIME(pb_quasar_file, sc_quasar_file, saigeqtl_file)
+    PLOT_TIME(pb_quasar_file, sc_quasar_file, saigeqtl_file)
     // PLOT_PC_GWAS_COMPARISON(pc_gwas_file, pc_sc_gwas_file)
-    // PLOT_CONCORDANCE(pb_quasar_file, sc_quasar_file, saigeqtl_file)
-    PLOT_GENE_PROPERTIES(gene_properties_file)
+    PLOT_CONCORDANCE_SCATTER(pb_quasar_file, sc_quasar_file, saigeqtl_file)
+    PLOT_FIGURE_2(
+        PLOT_PERM_SC.out.figure2,
+        PLOT_CONCORDANCE_SCATTER.out.figure2,
+        PLOT_POWER.out.figure2,
+        PLOT_TIME.out.figure2
+    )
+    // PLOT_GENE_PROPERTIES(gene_properties_file)
     // PLOT_GWAS_OUTPUT(sc_quasar_gwas_file, pb_quasar_gwas_file)
     // PLOT_PVALUE_SCATTER(pb_quasar_file, sc_quasar_file)
     // PLOT_ZSCORE_SCATTER(pb_quasar_file, sc_quasar_file, saigeqtl_file)
