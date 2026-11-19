@@ -120,40 +120,70 @@ p <- time_data |>
   theme_jp_vgrid() +
   theme(legend.position = "right")
 
-ggsave(
-  "time-int-plot.pdf",
-  p,
-  width = 7,
-  height = 3
-)
-
-if (length(args) >= 2) {
-  castie_vs_quasar <- time_data |>
+if (length(args) < 2) {
+  ggsave(
+    "time-int-plot.pdf",
+    p,
+    width = 7,
+    height = 3
+  )
+} else {
+  panel_levels <- c("Interaction", "Grouped")
+  model_levels <- c(
+    method_lookup[["p_glmm_sc"]],
+    "Grouped",
+    method_lookup[["castie"]]
+  )
+  interaction_pglmm <- time_data |>
     filter(
-      int_cov == "pseudotime",
-      analysis != "Grouped",
+      analysis == "Interaction (pseudotime)",
+      model == method_lookup[["p_glmm_sc"]]
+    ) |>
+    mutate(panel = "Grouped", model = method_lookup[["p_glmm_sc"]])
+  panel_data <- time_data |>
+    filter(
+      analysis %in% c("Interaction (pseudotime)", "Grouped"),
       model %in% method_lookup[c("p_glmm_sc", "castie")]
     ) |>
     mutate(
-      model = droplevels(model),
+      panel = if_else(analysis == "Grouped", "Grouped", "Interaction"),
+      model = if_else(analysis == "Grouped", "Grouped", as.character(model))
+    ) |>
+    bind_rows(interaction_pglmm) |>
+    mutate(
+      panel = factor(panel, levels = panel_levels),
+      model = factor(model, levels = model_levels)
+    ) |>
+    mutate(
       fold = hours / min(hours),
-      label = ifelse(fold > 1, paste0(round(fold), "x"), "")
+      label = if_else(fold > 1, paste0(round(fold), "x"), ""),
+      .by = panel
     )
 
-  p_castie <- castie_vs_quasar |>
+  p_panels <- panel_data |>
     ggplot(aes(model, hours, fill = model)) +
     geom_col(show.legend = FALSE) +
     geom_text(aes(label = label), hjust = -0.2) +
-    scale_fill_manual(values = method_col_lookup) +
-    scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+    scale_x_discrete(labels = \(x) sub("Single-cell ", "Single-cell\n", x)) +
+    scale_fill_manual(
+      values = c(method_col_lookup, "Grouped" = "#377EB8"),
+      drop = FALSE
+    ) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.2))) +
+    facet_wrap(~panel, ncol = 1, scales = "free") +
     coord_flip() +
     labs(x = NULL, y = "Time (h)") +
-    theme_jp_vgrid()
+    theme_jp_vgrid() +
+    theme(
+      strip.text = element_blank(),
+      strip.background = element_blank()
+    )
 
   ggsave(
-    "time-int-castie-plot.pdf",
-    p_castie,
-    width = 6,
-    height = 2
+    "time-context-plot.pdf",
+    p_panels,
+    width = 7,
+    height = 4.5
   )
+  saveRDS(p_panels, "time-context-plot.rds")
 }

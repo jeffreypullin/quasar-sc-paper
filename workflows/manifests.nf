@@ -162,11 +162,22 @@ workflow COLLECT_MANIFESTS {
     perm_sc_quasar_file = Channel
         .of("dataset\tmodel\tcell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tmin_n_cells\tcount_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tprop_file")
         .concat(perm_sc_quasar_filt
+            .filter { info, _region, _variant, _time, _prop -> !info.ablate }
             .map { info, region_file, variant_file, time_file, prop_file ->
                 "${info.dataset}\t${info.model}\t${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.min_n_cells}\t${info.count_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${prop_file}"
             }
         )
         .collectFile(name: 'sc_quasar_perm_file', newLine: true, sort: false)
+
+    perm_sc_quasar_spa_file = Channel
+        .of("dataset\tmodel\tcell_type\tchr\tcov_spec\tcell_frac\tindiv_frac\tmin_n_cells\tcount_frac\tint_cov\tk\tregion_file\tvariant_file\ttime_file\tprop_file\tablate")
+        .concat(perm_sc_quasar_filt
+            .filter { info, _region, _variant, _time, _prop -> info.ablate == "spa" }
+            .map { info, region_file, variant_file, time_file, prop_file ->
+                "${info.dataset}\t${info.model}\t${info.cell_type}\t${info.chr}\t${info.cov_spec}\t${info.cell_frac}\t${info.indiv_frac}\t${info.min_n_cells}\t${info.count_frac}\t${info.int_cov}\t${info.k}\t${region_file}\t${variant_file}\t${time_file}\t${prop_file}\t${info.ablate}"
+            }
+        )
+        .collectFile(name: 'sc_quasar_perm_spa_file', newLine: true, sort: false)
 
     perm_pb_quasar_file = Channel
         .of("dataset\tcell_type\tmodel\tchr\tcell_frac\tindiv_frac\tmin_n_cells\tcount_frac\tint_cov\tpb_type\tregion_file\tvariant_file\ttime_file\tprop_file")
@@ -203,6 +214,7 @@ workflow COLLECT_MANIFESTS {
     sc_quasar_perm_int_within_file
     sc_quasar_perm_int_logcount_file
     perm_sc_quasar_file
+    perm_sc_quasar_spa_file
     perm_pb_quasar_file
     skipped_combos_file
 }

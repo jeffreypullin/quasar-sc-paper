@@ -17,7 +17,7 @@ args <- commandArgs(trailingOnly = TRUE)
 sc_data_files <- read_tsv(args[1], show_col_types = FALSE)
 pb_data_files <- read_tsv(args[2], show_col_types = FALSE)
 
-cell_types <- c("B_IN", "CD4_NC")
+cell_types <- c("Plasma", "B_IN", "CD4_NC")
 models <- c("lm", "p_glmm_sc")
 
 compute_qq_data <- function(files) {
@@ -63,7 +63,7 @@ plot_perm_cell_frac <- function(plot_data, model_label, out_file) {
     mutate(
       cell_type = factor(
         cell_type_lookup[cell_type],
-        levels = cell_type_lookup[c("CD4_NC", "B_IN")]
+        levels = cell_type_lookup[c("CD4_NC", "B_IN", "Plasma")]
       ),
       cell_frac = factor(cell_frac, levels = sort(unique(cell_frac)))
     ) |>
@@ -92,13 +92,15 @@ plot_perm_cell_frac <- function(plot_data, model_label, out_file) {
     theme(legend.position = "none")
 
   n_frac <- n_distinct(plot_data$cell_frac)
+  n_cell_types <- n_distinct(plot_data$cell_type)
   ggsave(
     out_file,
     p,
     width = max(12, 2.2 * n_frac),
-    height = 10,
+    height = 5 * n_cell_types,
     limitsize = FALSE
   )
+  saveRDS(p, sub("\\.pdf$", ".rds", out_file))
 }
 
 build_sc_plot_data <- function(model_name, min_n_cells_val) {

@@ -11,6 +11,7 @@ cov_file <- args[[1]]
 int_cov <- args[[2]]
 k <- as.integer(args[[3]])
 cell_type <- args[[4]]
+value_col <- if (length(args) >= 5L && nzchar(args[[5]])) args[[5]] else int_cov
 
 if (is.na(k) || k < 2L) {
   stop("K must be an integer >= 2")
@@ -32,7 +33,7 @@ out <- covs |>
   transmute(
     sample_id,
     cell_id,
-    x = .data[[int_cov]]
+    x = .data[[value_col]]
   ) |>
   filter(is.finite(x)) |>
   group_by(sample_id) |>

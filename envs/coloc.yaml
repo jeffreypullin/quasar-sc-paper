@@ -1,0 +1,16 @@
+name: coloc
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base
+  - r-coloc
+  - r-dplyr
+  - r-readr
+  - r-tidyr
+  - r-purrr
+  - r-ggplot2
+  - r-data.table
+  - r-stringr
+  - htslib
+  - ucsc-liftover

@@ -12,9 +12,11 @@ concordance <- readRDS(args[2])
 power <- readRDS(args[3])
 time <- readRDS(args[4])
 
+concordance$theme$aspect.ratio <- NULL
+
 figure <- wrap_plots(
   perm,
-  concordance,
+  free(concordance, type = "label", side = "l"),
   wrap_elements(full = power),
   time,
   ncol = 2

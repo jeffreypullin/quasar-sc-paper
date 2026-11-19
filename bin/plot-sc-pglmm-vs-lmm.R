@@ -16,8 +16,6 @@ neg_log10_p <- function(p) {
   -log10(p)
 }
 
-effect_levels <- c("Main only", "Main in interaction", "Interaction")
-
 int_acat_cols <- function(region_names) {
   cols <- grep("^int_.*_acat_pvalue$", region_names, value = TRUE)
   if (length(cols) == 0L && "int_acat_pvalue" %in% region_names) {
@@ -78,9 +76,13 @@ read_egene_pvalues <- function(manifest) {
   bind_rows(rows)
 }
 
+cell_types <- c("Plasma", "B_IN", "CD4_NC")
+cell_type_levels <- unname(cell_type_lookup[cell_types])
+
 sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
   filter(
     model %in% c("lmm_sc", "p_glmm_sc"),
+    cell_type %in% cell_types,
     k == "none",
     cell_frac == 1,
     indiv_frac == 1
@@ -89,7 +91,7 @@ sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
 if ("data_type" %in% names(sc_data_files)) {
   sc_data_files <- filter(
     sc_data_files,
-    (model == "p_glmm_sc" & data_type == "sct_counts") |
+    (model == "p_glmm_sc" & data_type == "counts") |
       (model == "lmm_sc" & data_type == "log_counts")
   )
 } else if ("sc_type" %in% names(sc_data_files)) {
@@ -104,6 +106,15 @@ if ("count_frac" %in% names(sc_data_files)) {
 }
 if ("min_n_cells" %in% names(sc_data_files)) {
   sc_data_files <- filter(sc_data_files, min_n_cells < 0)
+}
+if ("cov_spec" %in% names(sc_data_files)) {
+  sc_data_files <- filter(sc_data_files, cov_spec == "bulk_pca")
+}
+if ("int_cov" %in% names(sc_data_files)) {
+  sc_data_files <- filter(sc_data_files, int_cov == "none")
+}
+if ("ablate" %in% names(sc_data_files)) {
+  sc_data_files <- filter(sc_data_files, ablate %in% c("none", ""))
 }
 
 lmm_manifest <- filter(sc_data_files, model == "lmm_sc")
@@ -144,24 +155,14 @@ plot_data <- inner_join(
   by = c("cell_type", "int_cov", "effect", "feature_id")
 )
 
-n_int_covs <- n_distinct(plot_data$int_cov[plot_data$int_cov != "none"])
-
-effect_order <- unique(c(effect_levels, plot_data$effect))
-
 plot_data <- plot_data |>
   mutate(
-    cell_type_label = coalesce(unname(cell_type_lookup[cell_type]), cell_type),
-    effect = factor(effect, levels = effect_order),
-    int_label = if_else(
-      int_cov == "none" | n_int_covs <= 1,
-      as.character(effect),
-      paste(as.character(effect), int_cov, sep = " / ")
-    ),
-    panel = paste(cell_type_label, int_label, sep = " / "),
+    cell_type_label = factor(unname(cell_type_lookup[cell_type]), levels = cell_type_levels),
+    panel = as.character(cell_type_label),
     neg_log10_lmm = neg_log10_p(lmm_pvalue),
     neg_log10_pglmm = neg_log10_p(pglmm_pvalue)
   ) |>
-  arrange(cell_type_label, effect, int_cov)
+  arrange(cell_type_label)
 
 if (nrow(plot_data) == 0L) {
   stop("No overlapping genes between lmm_sc and p_glmm_sc.")
@@ -173,7 +174,7 @@ model_summary <- plot_data |>
     spearman = cor(lmm_pvalue, pglmm_pvalue, method = "spearman"),
     .by = c(panel, cell_type_label, effect, int_cov)
   ) |>
-  arrange(cell_type_label, effect, int_cov) |>
+  arrange(cell_type_label) |>
   mutate(
     label = paste0(
       panel, "\n",
@@ -208,3 +209,4 @@ ggsave(
   height = 6 * ceiling(n_panels / n_cols),
   limitsize = FALSE
 )
+saveRDS(scatter_p, "sc-pglmm-vs-lmm-plot.rds")

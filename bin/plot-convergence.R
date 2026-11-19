@@ -116,7 +116,7 @@ p_var <- variant_data |>
 
 ggsave(
   "convergence-saigeqtl-vs-quasar-example-celltypes-plot.pdf",
-  plot = p_fail + p_var,
+  plot = p_fail + p_var + plot_annotation(tag_levels = "a"),
   width = 12,
   height = 5
 )

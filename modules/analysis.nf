@@ -1,6 +1,7 @@
 
 process PLOT_POWER {
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output/rds", pattern: "*.rds"
 
     input: 
         val pb_quasar_file
@@ -9,12 +10,19 @@ process PLOT_POWER {
     output: tuple path("power-method-comparison-plot.pdf"),
         path("power-frac-plot.pdf"),
         path("power-sc-non-zero-frac-plot.pdf"),
-        path("power-saigeqtl-vs-quasar-example-celltypes-plot.pdf")
+        path("power-saigeqtl-vs-quasar-example-celltypes-plot.pdf"),
+        path("power-p_glmm_sc-vs-lmm_sc-all-celltypes-plot.pdf"),
+        path("power-b-all-expression-comparison-plot.pdf"),
+        path("power-lm-nb_glm-p_glmm_sc-lmm_sc-onek1k-plot.pdf"),
+        path("power-lm-lm_cw-p_glmm_sc-onek1k-plot.pdf"),
+        path("power-p_glmm_sc-spa-vs-no-spa-onek1k-plot.pdf")
     path "power-saigeqtl-vs-quasar-example-celltypes-plot.rds", emit: figure2
+    path "power-p_glmm_sc-vs-lmm_sc-all-celltypes-plot.rds", emit: pglmm_lmm
+    path "power-lm-nb_glm-p_glmm_sc-lmm_sc-onek1k-plot.rds", emit: figure3
 
     script:
     """
-    plot-power.R $pb_quasar_file $sc_quasar_file $saigeqtl_file
+    plot-power.R "$pb_quasar_file" "$sc_quasar_file" "$saigeqtl_file"
     """
 }
 
@@ -38,12 +46,8 @@ process PLOT_POWER_OFFSET {
     publishDir "output"
     label "high_mem"
 
-    input:
-        val sc_offset_quasar_file
-    output:
-        tuple path("power-offset-plot.pdf"),
-              path("power-offset-scatter-plot.pdf"),
-              path("power-offset-summary.tsv")
+    input: val sc_offset_quasar_file
+    output: path "power-offset-plot.pdf"
 
     script:
     """
@@ -144,7 +148,8 @@ process PLOT_CONVERGENCE {
 
 process PLOT_PERM_SC {
     label "high_mem"
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output/rds", pattern: "*.rds"
 
     input: val perm_sc_quasar_file
     output:
@@ -160,7 +165,8 @@ process PLOT_PERM_SC {
 
 process PLOT_PERM_CELL_FRAC {
     label "high_mem"
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output/rds", pattern: "*.rds"
 
     input:
         val perm_sc_quasar_file
@@ -168,6 +174,8 @@ process PLOT_PERM_CELL_FRAC {
     output:
         path("perm-cell-frac-lm-plot.pdf")
         path("perm-cell-frac-p_glmm_sc-plot.pdf")
+        path("perm-cell-frac-lm-plot.rds")
+        path "perm-cell-frac-p_glmm_sc-plot.rds", emit: figure4
 
     script:
     """
@@ -256,7 +264,9 @@ process PLOT_PERM_PB {
 }
 
 process PLOT_PROP_N_CELLS {
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output", pattern: "*.tsv"
+    publishDir "output/rds", pattern: "*.rds"
     label "high_mem"
 
     input:
@@ -264,6 +274,7 @@ process PLOT_PROP_N_CELLS {
         path cells_per_indiv_file
     output:
         tuple path("prop-n-cells-plot.pdf"), path("prop-n-cells.tsv")
+        path "prop-n-cells-plot.rds", emit: figure4
 
     script:
     """
@@ -327,7 +338,8 @@ process PLOT_INT_OUTPUT {
 }
 
 process PLOT_PERM_SC_INT_GLOBAL {
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output/rds", pattern: "*.rds"
     label "high_mem"
 
     input: val perm_sc_quasar_file
@@ -342,7 +354,8 @@ process PLOT_PERM_SC_INT_GLOBAL {
 }
 
 process PLOT_PERM_SC_INT {
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output/rds", pattern: "*.rds"
     label "high_mem"
 
     input: val perm_sc_quasar_file
@@ -357,7 +370,8 @@ process PLOT_PERM_SC_INT {
 }
 
 process PLOT_PERM_SC_INT_WITHIN {
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output/rds", pattern: "*.rds"
     label "high_mem"
 
     input: val perm_sc_quasar_file
@@ -386,11 +400,14 @@ process PLOT_PERM_SC_INT_LOGCOUNT_BINS {
 }
 
 process PLOT_PERM_SC_ALL {
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output/rds", pattern: "*.rds"
     label "high_mem"
 
     input: path qq_rds_files
-    output: tuple path("perm-sc-all-int-plot.pdf"), path("perm-sc-all-main-plot.pdf")
+    output:
+        tuple path("perm-sc-all-int-plot.pdf"), path("perm-sc-all-main-plot.pdf")
+        path "perm-sc-all-int-plot.rds", emit: figure5
 
     script:
     """
@@ -399,15 +416,20 @@ process PLOT_PERM_SC_ALL {
 }
 
 process PLOT_PERM_SC_GROUPED {
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output/rds", pattern: "*.rds"
     label "high_mem"
 
-    input: val perm_sc_quasar_file
-    output: path("perm-sc-grouped-*-plot.pdf")
+    input:
+    val perm_sc_quasar_file
+    val prefix
+    output:
+    path("${prefix}-*-plot.pdf")
+    path("${prefix}-qq.rds", emit: qq)
 
     script:
     """
-    plot-perm-sc-grouped.R $perm_sc_quasar_file
+    plot-perm-sc-grouped.R $perm_sc_quasar_file $prefix
     """
 }
 
@@ -429,13 +451,17 @@ process PLOT_GROUPED_SC_OUTPUT {
 
 process PLOT_GROUPED_VS_INT {
     label "high_mem"
-    publishDir "output"
+    publishDir "output", pattern: "*.{pdf,tsv}"
+    publishDir "output/rds", pattern: "*.rds"
 
     input:
         val sc_quasar_file
         val castie_file
-    output: tuple path("grouped-vs-int-scatter-plot.pdf"),
-                 path("grouped-vs-int-upset-genes.tsv")
+    output:
+        tuple path("grouped-vs-int-scatter-plot.pdf"),
+              path("grouped-vs-int-b-all-pseudotime-upset-plot.pdf"),
+              path("grouped-vs-int-upset-genes.tsv")
+        path "grouped-vs-int-b-all-pseudotime-upset-plot.rds", emit: figure5
 
     script:
     """
@@ -457,14 +483,36 @@ process PLOT_GROUPED_INT_TIME {
 
 process PLOT_SC_PGLMM_VS_LMM {
     label "high_mem"
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output/rds", pattern: "*.rds"
 
     input: val sc_quasar_file
-    output: path("sc-pglmm-vs-lmm-plot.pdf")
+    output:
+        path "sc-pglmm-vs-lmm-plot.pdf"
+        path "sc-pglmm-vs-lmm-plot.rds", emit: pglmm_lmm
 
     script:
     """
     plot-sc-pglmm-vs-lmm.R $sc_quasar_file
+    """
+}
+
+process PLOT_PB_LM_VS_SC_PGLMM_EGENES {
+    label "high_mem"
+    publishDir "output"
+
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+        path annot_bed
+    output:
+        tuple path("pb-lm-vs-sc-pglmm-tss-distance-plot.pdf"),
+              path("pb-lm-vs-sc-pglmm-pb-mean-plot.pdf"),
+              path("pb-lm-vs-sc-pglmm-egenes.tsv")
+
+    script:
+    """
+    plot-pb-lm-vs-sc-pglmm-egenes.R $pb_quasar_file $sc_quasar_file $annot_bed
     """
 }
 
@@ -557,6 +605,28 @@ process PLOT_GWAS_OUTPUT {
     """
 }
 
+process PLOT_TRANS_QTL {
+    publishDir "output"
+    label "high_mem"
+
+    input:
+        val pb_quasar_gwas_file
+        val sc_quasar_gwas_file
+        path annot_bed
+        path gene_map
+    output:
+        tuple path("trans-discovery-counts-plot.pdf"),
+              path("trans-discovery-counts-plot.tsv"),
+              path("trans-time-p_glmm_id-vs-sc-plot.pdf"),
+              path("trans-time-p_glmm_id-vs-sc-plot.tsv"),
+              path("trans-p_glmm_id-hits.tsv")
+
+    script:
+    """
+    plot-trans-qtl.R $pb_quasar_gwas_file $sc_quasar_gwas_file $annot_bed $gene_map
+    """
+}
+
 process PLOT_PC_GWAS_OUTPUT {
     label "high_mem"
     publishDir "output"
@@ -629,7 +699,8 @@ process PLOT_ZSCORE_SCATTER {
 }
 
 process PLOT_CONCORDANCE_SCATTER {
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output/rds", pattern: "*.rds"
     label "high_mem"
 
     input:
@@ -639,7 +710,10 @@ process PLOT_CONCORDANCE_SCATTER {
     output:
         path("concordance-saigeqtl-p_glmm_sc-scatter.pdf")
         path("concordance-lm-p_glmm_sc-scatter.pdf"), optional: true
+        path("concordance-p_glmm_id-p_glmm_sc-scatter.pdf"), optional: true
         path "concordance-saigeqtl-p_glmm_sc-scatter.rds", emit: figure2
+        path("concordance-lm-p_glmm_sc-scatter.rds"), optional: true
+        path("concordance-p_glmm_id-p_glmm_sc-scatter.rds"), optional: true, emit: figure3
 
     script:
     """
@@ -661,16 +735,17 @@ process PLOT_MAIN_VS_INT {
     """
 }
 
-process PLOT_INT_TIME {
-    publishDir "output"
+process PLOT_CONTEXT_TIME {
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output/rds", pattern: "*.rds"
     label "high_mem"
 
     input:
         val sc_quasar_file
         val castie_file
     output:
-        path("time-int-plot.pdf")
-        path("time-int-castie-plot.pdf")
+        path("time-context-plot.pdf")
+        path "time-context-plot.rds", emit: figure5
 
     script:
     """
@@ -693,7 +768,9 @@ process PLOT_QUASAR_INT_TIME {
 }
 
 process PLOT_TIME {
-    publishDir "output"
+    publishDir "output", pattern: "*.pdf"
+    publishDir "output", pattern: "*.tsv"
+    publishDir "output/rds", pattern: "*.rds"
 
     input:
         val pb_quasar_file
@@ -702,8 +779,17 @@ process PLOT_TIME {
     output: tuple path("time-quasar-plot.pdf"),
         path("time-method-comparison-plot.pdf"),
         path("time-frac-plot.pdf"),
-        path("time-saigeqtl-vs-quasar-example-celltypes-plot.pdf")
+        path("time-saigeqtl-vs-quasar-example-celltypes-plot.pdf"),
+        path("time-p_glmm_sc-vs-lmm_sc-all-celltypes-plot.pdf"),
+        path("time-lm-p_glmm_id-p_glmm_sc-example-celltypes-plot.pdf"),
+        path("time-quasar-plot.tsv"),
+        path("time-method-comparison-plot.tsv"),
+        path("time-frac-plot.tsv"),
+        path("time-saigeqtl-vs-quasar-example-celltypes-plot.tsv"),
+        path("time-p_glmm_sc-vs-lmm_sc-all-celltypes-plot.tsv"),
+        path("time-lm-p_glmm_id-p_glmm_sc-example-celltypes-plot.tsv")
     path "time-saigeqtl-vs-quasar-example-celltypes-plot.rds", emit: figure2
+    path "time-p_glmm_sc-vs-lmm_sc-all-celltypes-plot.rds", emit: pglmm_lmm
 
     script:
     """
@@ -725,6 +811,68 @@ process PLOT_FIGURE_2 {
     script:
     """
     plot-figure-2.R $perm_plot $concordance_plot $power_plot $time_plot
+    """
+}
+
+process PLOT_FIGURE_3 {
+    publishDir "output"
+
+    input:
+        path power_plot
+        path concordance_plot
+    output:
+        path "figure-3.pdf"
+
+    script:
+    """
+    plot-figure-3.R "$power_plot" "$concordance_plot"
+    """
+}
+
+process PLOT_FIGURE_4 {
+    publishDir "output"
+
+    input:
+        path cell_frac_plot
+        path prop_n_cells_plot
+    output:
+        path "figure-4.pdf"
+
+    script:
+    """
+    plot-figure-4.R "$cell_frac_plot" "$prop_n_cells_plot"
+    """
+}
+
+process PLOT_FIGURE_5 {
+    publishDir "output"
+
+    input:
+        path interaction_plot
+        path time_plot
+        path upset_plot
+    output:
+        path "figure-5.pdf"
+
+    script:
+    """
+    plot-figure-5.R "$interaction_plot" "$time_plot" "$upset_plot"
+    """
+}
+
+process PLOT_SC_PGLMM_VS_LMM_FIGURE {
+    publishDir "output"
+
+    input:
+        path scatter_plot
+        path power_plot
+        path time_plot
+    output:
+        path "sc-pglmm-vs-lmm-figure.pdf"
+
+    script:
+    """
+    plot-sc-pglmm-vs-lmm-figure.R $scatter_plot $power_plot $time_plot
     """
 }
 
@@ -1069,13 +1217,22 @@ process CREATE_EXAMPLE_DATA {
 
 process RUN_COLOC {
     publishDir "output"
+    conda "$projectDir/envs/coloc.yaml"
+    label "high_mem"
 
-    input: val sc_quasar_file
-    output: path("coloc-results.tsv")
+    input:
+        val pb_quasar_file
+        val sc_quasar_file
+        path annot_bed
+        path finngen_dir
+    output:
+        path("coloc-results.tsv")
+        path("coloc-summary.tsv")
+        path("coloc-summary.pdf")
 
     script:
     """
-    run-coloc.R $sc_quasar_file
+    run-coloc.R ${pb_quasar_file} ${sc_quasar_file} ${annot_bed} ${finngen_dir}
     """
 }
 
@@ -1158,5 +1315,54 @@ process PLOT_MAF {
     script:
     """
     plot-maf.R $pb_quasar_file $sc_quasar_file
+    """
+}
+
+process PLOT_SLINGSHOT {
+    publishDir "output"
+
+    input: tuple val(info), path(plot_data)
+    output:
+        tuple path("${info.dataset}-${info.cell_type}-slingshot.pdf"),
+            path("${info.dataset}-${info.cell_type}-slingshot-celltype.pdf")
+
+    script:
+    """
+    plot-slingshot.R "$plot_data" "${info.cell_type}"
+    mv "${info.cell_type}-slingshot.pdf" "${info.dataset}-${info.cell_type}-slingshot.pdf"
+    mv "${info.cell_type}-slingshot-celltype.pdf" "${info.dataset}-${info.cell_type}-slingshot-celltype.pdf"
+    """
+}
+
+process PLOT_SLINGSHOT_SEED {
+    publishDir "output"
+
+    input: tuple val(info), val(seed), path(plot_data)
+    output:
+        tuple path("${info.dataset}-${info.cell_type}-seed${seed}-slingshot.pdf"),
+            path("${info.dataset}-${info.cell_type}-seed${seed}-slingshot-celltype.pdf")
+
+    script:
+    """
+    plot-slingshot.R "$plot_data" "${info.cell_type}"
+    mv "${info.cell_type}-slingshot.pdf" "${info.dataset}-${info.cell_type}-seed${seed}-slingshot.pdf"
+    mv "${info.cell_type}-slingshot-celltype.pdf" "${info.dataset}-${info.cell_type}-seed${seed}-slingshot-celltype.pdf"
+    """
+}
+
+process TABULATE_PT_SEED_EGENES {
+    label "nano"
+    publishDir "output"
+
+    input:
+        path manifest
+        path gene_map
+    output:
+        tuple path("pseudotime-seed-egenes.tsv"),
+              path("pseudotime-seed-egenes.pdf")
+
+    script:
+    """
+    tabulate-pt-seed-egenes.R $manifest $gene_map
     """
 }

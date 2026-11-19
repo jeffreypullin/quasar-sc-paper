@@ -149,6 +149,7 @@ compute_qq_data_by_maf <- function(variant_files) {
 }
 
 overall_plot_data <- sc_data_files |>
+  filter(model == "p_glmm_sc") |>
   filter(cell_frac == 1) |>
   filter(indiv_frac == 1) |>
   filter(count_frac == 1) |>

@@ -8,13 +8,20 @@ suppressPackageStartupMessages({
   library(SingleCellExperiment)
   library(slingshot)
   library(phateR)
-  library(ggplot2)
   library(readr)
 })
 
 args <- commandArgs(trailingOnly = TRUE)
 input_tsv <- args[1]
-output_prefix <- args[2]
+dataset <- args[2]
+cell_type <- args[3]
+# No fourth argument: the published trajectory (PHATE seed 20261013).
+# A fourth argument re-draws PHATE and writes seed-tagged files.
+seed <- if (length(args) >= 4L) as.integer(args[4]) else 20261013L
+output_prefix <- paste(dataset, cell_type, sep = "-")
+if (length(args) >= 4L) {
+  output_prefix <- paste(output_prefix, paste0("seed", seed), sep = "-")
+}
 n_pca <- 10L
 
 meta_cols <- c("cell_id", "cell_label")
@@ -25,7 +32,7 @@ gene_cols <- setdiff(colnames(dat), meta_cols)
 res_mat <- as.matrix(dat[, gene_cols, drop = FALSE])
 rownames(res_mat) <- cell_ids
 
-phate_op <- phate(res_mat, npca = n_pca, seed = 20261013)
+phate_op <- phate(res_mat, npca = n_pca, seed = seed)
 rd_mat <- phate_op$embedding
 colnames(rd_mat) <- paste0("PHATE_", seq_len(ncol(rd_mat)))
 rownames(rd_mat) <- cell_ids
@@ -63,55 +70,26 @@ pseudotime_df$cell_label <- colData(sce)$cell_label
 pseudotime_df$pseudotime <- pseudotime
 write_tsv(pseudotime_df, paste0(output_prefix, "-pseudotime.tsv"))
 
-plot_df <- as.data.frame(rd_mat[, 1:2, drop = FALSE])
-colnames(plot_df) <- c("PHATE_1", "PHATE_2")
-plot_df$cell_label <- colData(sce)$cell_label
-plot_df$pseudotime <- pseudotime
-
 sc_list <- slingCurves(sds)
 cv <- sc_list[[curve_idx]]
 coords <- cv$s[cv$ord, 1:2, drop = FALSE]
-curve_df <- data.frame(PHATE_1 = coords[, 1], PHATE_2 = coords[, 2], lineage = curve_idx)
 
-p_pt <- ggplot(plot_df, aes(PHATE_2, PHATE_1)) +
-  geom_point(aes(colour = pseudotime), size = 0.3, alpha = 0.6) +
-  scale_colour_viridis_c(na.value = "grey80") +
-  geom_path(data = curve_df, aes(PHATE_2, PHATE_1, group = lineage), linewidth = 1) +
-  theme_minimal() +
-  labs(
-    title = paste("Slingshot trajectory (pseudotime):", output_prefix),
-    x = "PHATE 2",
-    y = "PHATE 1",
-    colour = "Pseudotime"
-  )
-
-ggsave(
-  paste0(output_prefix, "-slingshot.pdf"),
-  p_pt,
-  width = 8,
-  height = 6
+cells <- data.frame(
+  kind = "cell",
+  PHATE_1 = rd_mat[, 1],
+  PHATE_2 = rd_mat[, 2],
+  cell_label = as.character(colData(sce)$cell_label),
+  pseudotime = pseudotime,
+  lineage = NA_integer_,
+  stringsAsFactors = FALSE
 )
-
-p_ct <- ggplot(plot_df, aes(PHATE_2, PHATE_1)) +
-  geom_path(
-    data = curve_df,
-    aes(PHATE_2, PHATE_1, group = lineage),
-    linewidth = 1,
-    inherit.aes = FALSE
-  ) +
-  geom_point(aes(colour = cell_label), size = 0.35, alpha = 0.75) +
-  scale_colour_brewer(type = "qual", palette = "Set1") +
-  theme_minimal() +
-  labs(
-    title = paste("Slingshot trajectory (cell type):", output_prefix),
-    x = "PHATE 2",
-    y = "PHATE 1",
-    colour = "Cell type"
-  )
-
-ggsave(
-  paste0(output_prefix, "-slingshot-celltype.pdf"),
-  p_ct,
-  width = 8,
-  height = 6
+curve <- data.frame(
+  kind = "curve",
+  PHATE_1 = coords[, 1],
+  PHATE_2 = coords[, 2],
+  cell_label = NA_character_,
+  pseudotime = NA_real_,
+  lineage = curve_idx,
+  stringsAsFactors = FALSE
 )
+write_tsv(rbind(cells, curve), paste0(output_prefix, "-slingshot-plot.tsv"))

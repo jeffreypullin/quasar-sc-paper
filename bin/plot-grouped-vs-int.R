@@ -4,6 +4,8 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(readr)
   library(ggplot2)
+  library(ggupset)
+  library(patchwork)
   library(purrr)
   library(tidyr)
 })
@@ -284,3 +286,60 @@ upset_genes <- called_wide |>
   )
 
 write_tsv(upset_genes, "grouped-vs-int-upset-genes.tsv")
+
+upset_set_levels <- c("quasar GxC", "CASTIE", "quasar grouped")
+
+upset_b_all <- upset_genes |>
+  filter(cell_type == "B_all", int_cov == "pseudotime", data_type == "counts") |>
+  mutate(
+    methods = pmap(
+      list(called_p_glmm, called_castie, called_grouped),
+      function(p_glmm, castie, grouped) {
+        upset_set_levels[c(p_glmm, castie, grouped)]
+      }
+    )
+  )
+
+if (nrow(upset_b_all) == 0L) {
+  stop("No BH-significant B_all / pseudotime / counts eGenes for UpSet plot.")
+}
+
+set_sizes <- tibble(
+  method = factor(upset_set_levels, levels = rev(upset_set_levels)),
+  n = c(
+    sum(upset_b_all$called_p_glmm),
+    sum(upset_b_all$called_castie),
+    sum(upset_b_all$called_grouped)
+  )
+)
+
+upset_p <- upset_b_all |>
+  ggplot(aes(x = methods)) +
+  geom_bar() +
+  scale_x_upset(sets = upset_set_levels) +
+  labs(
+    x = NULL,
+    y = "Number of significant eGenes"
+  ) +
+  theme_jp()
+
+size_p <- set_sizes |>
+  ggplot(aes(x = n, y = method)) +
+  geom_col(fill = "grey35", width = 0.6) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(x = "number of eGenes", y = NULL) +
+  theme_jp() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+
+combined_p <- size_p + upset_p + plot_layout(widths = c(1.2, 3))
+
+ggsave(
+  "grouped-vs-int-b-all-pseudotime-upset-plot.pdf",
+  combined_p,
+  width = 10,
+  height = 6
+)
+saveRDS(combined_p, "grouped-vs-int-b-all-pseudotime-upset-plot.rds")

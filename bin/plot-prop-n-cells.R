@@ -15,7 +15,7 @@ args <- commandArgs(trailingOnly = TRUE)
 perm_sc_data_files <- read_tsv(args[1], show_col_types = FALSE)
 cells_per_indiv <- read_tsv(args[2], show_col_types = FALSE)
 
-main_types <- c("CD4_NC", "CD4_ET", "CD4_SOX4", "B_IN", "Mono_NC", "Plasma")
+main_types <- c("Plasma", "B_IN", "CD4_NC")
 
 p_threshold <- 1e-4
 
@@ -69,6 +69,7 @@ ct_levels <- unname(cell_type_lookup[main_types[main_types %in% plot_data$cell_t
 p <- plot_data |>
   mutate(cell_type = factor(unname(cell_type_lookup[cell_type]), levels = ct_levels)) |>
   ggplot(aes(mean_cells_per_donor, obs_exp, colour = cell_type)) +
+  geom_vline(xintercept = c(5, 10), colour = "red", linetype = "dashed") +
   geom_hline(yintercept = 1, linetype = "dashed") +
   geom_path() +
   geom_point(size = 2) +
@@ -85,3 +86,4 @@ p <- plot_data |>
   theme_jp_vgrid()
 
 ggsave("prop-n-cells-plot.pdf", p, width = 10, height = 7)
+saveRDS(p, "prop-n-cells-plot.rds")

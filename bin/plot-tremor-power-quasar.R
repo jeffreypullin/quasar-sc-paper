@@ -73,7 +73,7 @@ type_levels <- c(
   "Single-cell LMM, TensorQTL"
 )
 type_cols <- c(
-  "Pseudobulk LM" = "#AA4499",
+  "Pseudobulk LM" = "#4477AA",
   "Single-cell P-GLMM, bulk PCA" = "#4DAF4A",
   "Single-cell P-GLMM, TensorQTL" = "#A1D99B",
   "Single-cell LMM, bulk PCA" = "#44AA99",

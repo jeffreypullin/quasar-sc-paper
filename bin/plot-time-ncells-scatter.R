@@ -23,7 +23,7 @@ sc_data_files <- read_tsv(args[2], show_col_types = FALSE)
 cluster_sizes <- read_tsv(args[3], show_col_types = FALSE) |>
   mutate(cell_type = str_replace_all(cell_label, " ", "_"))
 
-method_levels <- unname(method_lookup[c("lm", "lm_cw", "lmm_sc", "p_glmm_sc")])
+method_levels <- unname(method_lookup[c("lm", "p_glmm_sc_ablate")])
 
 n_cells_by_type <- cluster_sizes |>
   filter(!cell_type %in% c("B_all", "T_all")) |>
@@ -32,7 +32,7 @@ n_cells_by_type <- cluster_sizes |>
 pb_manifest <- pb_data_files |>
   filter(
     dataset == "onek1k",
-    model %in% c("lm", "lm_cw"),
+    model == "lm",
     pb_type == "logcounts",
     int_cov == "none",
     indiv_frac == 1,
@@ -43,19 +43,20 @@ pb_manifest <- pb_data_files |>
 sc_manifest <- sc_data_files |>
   filter(
     dataset == "onek1k",
-    (model == "lmm_sc" & data_type == "log_counts") |
-      (model == "p_glmm_sc" & data_type == "counts"),
+    model == "p_glmm_sc",
+    data_type == "counts",
     cov_spec == "bulk_pca",
     as.character(k) == "none",
     int_cov == "none",
     indiv_frac == 1,
     count_frac == 1,
-    min_n_cells < 0
+    min_n_cells < 0,
+    ablate == "donor-totals"
   )
 
 time_data <- bind_rows(
   pb_manifest |> mutate(method = model),
-  sc_manifest |> mutate(method = model)
+  sc_manifest |> mutate(method = "p_glmm_sc_ablate")
 ) |>
   filter(!cell_type %in% c("B_all", "T_all")) |>
   inner_join(n_cells_by_type, by = "cell_type") |>
@@ -85,6 +86,6 @@ p <- time_data |>
     colour = "Method"
   ) +
   theme_jp() +
-  theme(legend.position = "right")
+  theme(legend.position = "top")
 
 ggsave("time-ncells-scatter-plot.pdf", p, width = 8, height = 5)

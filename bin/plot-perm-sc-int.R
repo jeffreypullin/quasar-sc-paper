@@ -19,7 +19,7 @@ source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
 args <- commandArgs(trailingOnly = TRUE)
 
 sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
-  filter(int_cov != "none")
+  filter(int_cov != "none", k == "none")
 
 compute_qq_data_int <- function(variant_files, prop_file, int_cov, type) {
 

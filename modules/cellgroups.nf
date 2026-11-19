@@ -5,8 +5,9 @@ process COMPUTE_CELL_GROUPS {
     output: tuple val(info), path("${info.dataset}-${info.cell_type}-${info.int_cov}-K${info.k}-cell-groups.tsv")
 
     script:
+    def value_col = info.group_cov ?: info.int_cov
     """
-    compute-cell-groups.R "$cov_file" "${info.int_cov}" "${info.k}" "${info.cell_type}"
+    compute-cell-groups.R "$cov_file" "${info.int_cov}" "${info.k}" "${info.cell_type}" "${value_col}"
     mv "${info.cell_type}-${info.int_cov}-K${info.k}-cell-groups.tsv" "${info.dataset}-${info.cell_type}-${info.int_cov}-K${info.k}-cell-groups.tsv"
     """
 }

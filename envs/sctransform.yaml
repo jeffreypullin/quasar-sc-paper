@@ -3,7 +3,10 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - r-base
+  # Seurat 4.4 keeps SCTransform on the v1 Poisson model. Seurat 5 defaults to v2.
+  - r-base=4.3.3
+  - r-seurat=4.4.0
+  - r-seuratobject=4.1.*
   - r-sctransform
   - r-hdf5r
   - r-matrix

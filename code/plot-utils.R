@@ -75,13 +75,13 @@ method_lookup <- c(
 method_col_lookup <- c(
   "SAIGE-QTL" = "#0072B2",
   "CASTIE" = "#332288",
-  "Pseudobulk LM" = "#AA4499",
-  "Pseudobulk NB-GLM" = "#DDCC77",
+  "Pseudobulk LM" = "#4477AA",
+  "Pseudobulk NB-GLM" = "#EE7733",
   "Pseudobulk P-GLMM" = "#117733",
   "Pseudobulk P-GLMM (iid)" = "#999933",
   "Single-cell P-GLMM" = "#4DAF4A",
   "Single-cell P-GLMM (no donor totals)" = "#A1D99B",
-  "Single-cell LMM" = "#44AA99",
+  "Single-cell LMM" = "#AA3377",
   "Pseudobulk LM with cell weights" = "#88CCEE",
   "TensorQTL" = "#0077BB"
 )

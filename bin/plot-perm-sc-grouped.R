@@ -14,6 +14,8 @@ source("/home/jp2045/quasar-sc-paper/code/plot-utils.R")
 
 args <- commandArgs(trailingOnly = TRUE)
 
+prefix <- if (length(args) >= 2L && nzchar(args[[2]])) args[[2]] else "perm-sc-grouped"
+
 sc_data_files <- read_tsv(args[1], show_col_types = FALSE) |>
   filter(k != "none")
 
@@ -123,11 +125,17 @@ collect_group_qq <- function(variant_files, int_cov) {
   }))
 }
 
+perm_label <- dplyr::case_when(
+  grepl("within", prefix) ~ "Within-sample",
+  grepl("int", prefix) ~ "Interaction",
+  TRUE ~ "Global"
+)
+
 plot_data <- sc_data_files |>
   filter(cell_frac == 1, indiv_frac == 1) |>
   summarise(
     file_list = list(variant_file),
-    .by = c(cell_type, int_cov, k)
+    .by = c(cell_type, int_cov, k, model)
   ) |>
   rowwise() |>
   mutate(qq_data = list(collect_group_qq(file_list, int_cov))) |>
@@ -171,7 +179,7 @@ for (s in single_stats) {
     "Cell type"
   )
   ggsave(
-    paste0("perm-sc-grouped-", s, "-plot.pdf"),
+    paste0(prefix, "-", s, "-plot.pdf"),
     p,
     width = 14,
     height = 10
@@ -196,9 +204,21 @@ if (nrow(quantile_data) > 0L) {
     "Quantile"
   )
   ggsave(
-    "perm-sc-grouped-quantile-plot.pdf",
+    paste0(prefix, "-quantile-plot.pdf"),
     quantile_p,
     width = 14,
     height = 10
   )
 }
+
+saveRDS(
+  list(
+    int = plot_data |>
+      filter(stat == "linear") |>
+      mutate(perm = perm_label, analysis = "Grouped", source = "sc"),
+    main = plot_data |>
+      filter(stat == "pvalue") |>
+      mutate(perm = perm_label, analysis = "Grouped", source = "sc")
+  ),
+  paste0(prefix, "-qq.rds")
+)

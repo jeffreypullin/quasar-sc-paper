@@ -72,7 +72,7 @@ process RUN_QUASAR_PB {
       -c "$covs" \
       -o "${info.dataset}-${info.model}-${info.chr}-${info.cell_type}-${info.int_cov}" \
       --model "${info.model}" \
-      --mode                                                                                                                   cis \
+      --mode                                                                                                                        cis \
       ${quant_res_flag} \
       ${apl_flag} \
       ${int_flag} \
@@ -102,7 +102,7 @@ process RUN_QUASAR_PB_LM_CW {
       -p "$prefix" \
       -b "$pheno_bed" \
       -c "$covs" \
-      --n-cells-file         "$n_cells" \
+      --n-cells-file           "$n_cells" \
       -o "${base}" \
       --model lm_cw \
       --mode cis \
@@ -127,7 +127,7 @@ process RUN_QUASAR_SC {
     def int_flag = (info.int_cov != "none" && info.k == "none") ? "-i '${interaction_cov}'" : ""
     def cg_flag = (info.k != "none") ? "--cell-groups ${cell_groups}" : ""
     // Appended without a separator so unablated scripts stay byte-identical for -resume.
-    def ablate_flag = info.ablate ? " --ablate-${info.ablate}" : ""
+    def ablate_flag = Utils.ablateFlag(info)
     def base = "${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}${Utils.ablateSuffix(info)}"
     """
     /usr/bin/time -p -o "${base}-time.txt" \
@@ -136,7 +136,7 @@ process RUN_QUASAR_SC {
       --sc-pheno "$pheno_bed" \
       --anno "$anno" \
       --cov "$covs" \
-      --out                                "${base}" \
+      --out                                                "${base}" \
       --model                                                                                                                                                                                                                                                                 ${info.model} \
       --mode cis \
       ${int_flag} \
@@ -162,10 +162,10 @@ process RUN_QUASAR_SC_GENO_PERM {
     def interaction_cov = info.interaction_cov ?: info.int_cov
     def int_flag = (info.int_cov != "none" && info.k == "none") ? "-i '${interaction_cov}'" : ""
     def cg_flag = (info.k != "none") ? "--cell-groups ${cell_groups}" : ""
-    def ablate_flag = info.ablate ? " --ablate-${info.ablate}" : ""
+    def ablate_flag = Utils.ablateFlag(info)
     def base = "${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}${Utils.ablateSuffix(info)}"
-    // Five replicates, matching the previous FAM-shuffle permutation count.
-    def n_perm = 5
+    // Main-effect nulls use 10 replicates. Interaction nulls stay at five.
+    def n_perm = info.int_cov == "none" ? 10 : 5
     """
     /usr/bin/time -p -o "${base}-time.txt" \
       /home/jp2045/quasar/build/quasar \
@@ -175,7 +175,7 @@ process RUN_QUASAR_SC_GENO_PERM {
       --cov "$covs" \
       --out "${base}" \
       --model ${info.model} \
-      --mode cis \
+      --mode         cis \
       --permutation \
       --n-perm ${n_perm} \
       ${int_flag} \
@@ -209,7 +209,7 @@ process RUN_QUASAR_SC_OFFSET {
       --offset-file "$offset_file" \
       --out "${base}" \
       --model ${info.model} \
-      --mode   cis \
+      --mode           cis \
       --verbose
     gzip "${base}-quasar-cis-variant.txt"
     gzip "${base}-quasar-cis-region.txt"
@@ -227,26 +227,23 @@ process RUN_QUASAR_SC_GWAS {
 
     script:
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
+    def ablate_flag = info.ablate ? "--ablate-${info.ablate}" : ""
+    def out_base = "${info.dataset}-pheno-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}"
     """
-    /usr/bin/time -p -o "${info.dataset}-pheno-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-time.txt" \
+    /usr/bin/time -p -o "${out_base}-time.txt" \
       /home/jp2045/quasar/build/quasar \
       --plink "$prefix" \
       --sc-pheno "$pheno_bed" \
       --anno "$anno" \
       --cov "$covs" \
-      --out "${info.dataset}-pheno-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}" \
-      --model     ${info.model} \
+      --out "${out_base}" \
+      --model             ${info.model} \
       --pheno-chr ${info.pheno_chr} \
       --mode gwas \
+      --max-pvalue 5e-6 \
+      ${ablate_flag} \
       --verbose
-    
-    awk 'BEGIN {FS=OFS="\t"} NR==1 || (\$10+0) < 5e-6' \
-        "${info.dataset}-pheno-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-quasar-gwas-variant.txt" >\
-        "sig-${info.dataset}-pheno-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-quasar-gwas-variant.txt"
-    awk 'END { print NR-1 }' \
-        "${info.dataset}-pheno-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-quasar-gwas-variant.txt" >\
-        "${info.dataset}-pheno-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-n-variants.txt"
-    rm "${info.dataset}-pheno-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-quasar-gwas-variant.txt"
+    mv "${out_base}-quasar-gwas-variant.txt" "sig-${out_base}-quasar-gwas-variant.txt"
     """
 }
 
@@ -263,27 +260,22 @@ process RUN_QUASAR_PB_GWAS {
     def apl_flag = (info.model == "nb_glm") ? "--use-apl" : ""
     def quant_res_flag = (info.model == "nb_glm") ? "--use-quant-res" : ""
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
+    def out_base = "${info.dataset}-pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}"
     """
-    /usr/bin/time -p -o "${info.dataset}-pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-time.txt" \
+    /usr/bin/time -p -o "${out_base}-time.txt" \
       /home/jp2045/quasar/build/quasar \
       -p "$prefix" \
       -b "$pheno_bed" \
       -c "$covs" \
-      --out "${info.dataset}-pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}" \
+      --out "${out_base}" \
       --model "${info.model}" \
       --pheno-chr ${info.pheno_chr} \
-      --mode   gwas \
+      --mode       gwas \
+      --max-pvalue 5e-6 \
       ${apl_flag} \
       ${quant_res_flag} \
       --verbose
-    
-    awk 'BEGIN {FS=OFS="\t"} NR==1 || (toupper(\$10)!="NAN" && (\$10+0) < 5e-6)' \
-        "${info.dataset}-pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-quasar-gwas-variant.txt" >\
-        "sig-${info.dataset}-pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-quasar-gwas-variant.txt"
-    awk 'END { print NR-1 }' \
-        "${info.dataset}-pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-quasar-gwas-variant.txt" >\
-        "${info.dataset}-pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-n-variants.txt"
-    rm "${info.dataset}-pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}-quasar-gwas-variant.txt"
+    mv "${out_base}-quasar-gwas-variant.txt" "sig-${out_base}-quasar-gwas-variant.txt"
     """
 }
 
@@ -309,18 +301,12 @@ process RUN_QUASAR_GWAS {
       -c "$covs" \
       --out "${out_prefix}" \
       --model ${info.model} \
-      --mode   gwas \
+      --mode         gwas \
+      --max-pvalue 5e-6 \
       ${apl_flags} \
       ${quant_res_flag} \
       --verbose
-
-    awk 'BEGIN {FS=OFS="\t"} NR==1 || (toupper(\$10)!="NAN" && (\$10+0) < 5e-6)' \
-        "${out_prefix}-quasar-gwas-variant.txt" >\
-        "sig-${out_prefix}-quasar-gwas-variant.txt"
-    awk 'END { print NR-1 }' \
-        "${out_prefix}-quasar-gwas-variant.txt" >\
-        "${out_prefix}-n-variants.txt"
-    rm "${out_prefix}-quasar-gwas-variant.txt"
+    mv "${out_prefix}-quasar-gwas-variant.txt" "sig-${out_prefix}-quasar-gwas-variant.txt"
     """
 }
 
@@ -344,7 +330,7 @@ process RUN_QUASAR_SC_PC_GWAS {
       --cov "$covs" \
       --out "${out_prefix}" \
       --model ${info.model} \
-      --mode   gwas \
+      --mode       gwas \
       --verbose
 
     awk 'BEGIN {FS=OFS="\t"} NR==1 || (toupper(\$10)!="NAN" && (\$10+0) < 5e-6)' \

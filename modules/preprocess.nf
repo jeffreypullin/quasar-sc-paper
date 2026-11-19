@@ -123,12 +123,17 @@ process COMPUTE_SC_SCT_COUNTS {
     label "long_mega_mem"
 
     input: tuple val(info), path(sc_counts), val(raw_sc_data)
-    output: tuple val("sct_counts"), val(info), path("${info.dataset}-${info.cell_type}-sct-sc-pheno.tsv")
+    output:
+        tuple val("sct_counts"), val(info),
+            path("${info.dataset}-${info.cell_type}-sct-sc-pheno.tsv"),
+            emit: counts
+        tuple val("sct_residuals"), val(info),
+            path("${info.dataset}-${info.cell_type}-sct-residuals-sc-pheno.tsv"),
+            emit: residuals
 
     script:
     """
-    compute-sc-sct-counts.R "$sc_counts" "$raw_sc_data" "${info.cell_type}"
-    mv "${info.cell_type}-sct-sc-pheno.tsv" "${info.dataset}-${info.cell_type}-sct-sc-pheno.tsv"
+    compute-sc-sct-counts.R "$sc_counts" "$raw_sc_data" "${info.dataset}" "${info.cell_type}"
     """
 }
 
@@ -276,7 +281,7 @@ process COMPUTE_PB_TMM_INT{
 process COMPUTE_CLUSTER_SIZES{
     conda "$projectDir/envs/scanpy.yaml"
     label "high_mem"
-    publishDir "output"
+    publishDir "output", pattern: "*-cluster-sizes.tsv"
     
     input: tuple val(dataset), val(raw_sc_data)
     output: tuple val(dataset), path("${dataset}-cluster-sizes.tsv"), path("${dataset}-cells-per-indiv.tsv")
@@ -465,20 +470,32 @@ process PREPARE_SEACELLS_ADATA {
 process RUN_SLINGSHOT {
     conda "$projectDir/envs/slingshot.yaml"
     label "high_mem"
-    publishDir path: "output", pattern: "*.pdf", mode: "copy"
 
     input: tuple val(info), path(slingshot_input)
     output:
-        tuple val(info), path("${info.dataset}-${info.cell_type}-pseudotime.tsv"),
-        path("${info.dataset}-${info.cell_type}-slingshot.pdf"),
-        path("${info.dataset}-${info.cell_type}-slingshot-celltype.pdf")
+        tuple val(info),
+            path("${info.dataset}-${info.cell_type}-pseudotime.tsv"),
+            path("${info.dataset}-${info.cell_type}-slingshot-plot.tsv")
 
     script:
     """
-    run-slingshot.R "$slingshot_input" "${info.cell_type}"
-    mv "${info.cell_type}-pseudotime.tsv" "${info.dataset}-${info.cell_type}-pseudotime.tsv"
-    mv "${info.cell_type}-slingshot.pdf" "${info.dataset}-${info.cell_type}-slingshot.pdf"
-    mv "${info.cell_type}-slingshot-celltype.pdf" "${info.dataset}-${info.cell_type}-slingshot-celltype.pdf"
+    run-slingshot.R "$slingshot_input" "${info.dataset}" "${info.cell_type}"
+    """
+}
+
+process RUN_SLINGSHOT_SEED {
+    conda "$projectDir/envs/slingshot.yaml"
+    label "high_mem"
+
+    input: tuple val(info), path(slingshot_input), val(seed)
+    output:
+        tuple val(info), val(seed),
+            path("${info.dataset}-${info.cell_type}-seed${seed}-pseudotime.tsv"),
+            path("${info.dataset}-${info.cell_type}-seed${seed}-slingshot-plot.tsv")
+
+    script:
+    """
+    run-slingshot.R "$slingshot_input" "${info.dataset}" "${info.cell_type}" "${seed}"
     """
 }
 

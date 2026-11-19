@@ -21,9 +21,9 @@ offset_lookup <- c(
 )
 
 offset_col_lookup <- c(
-  "Per-cell depth (native)" = "#882255",
-  "Donor-flattened depth"   = "#44AA99",
-  "Constant depth"          = "#DDCC77"
+  "Per-cell depth (native)" = "#0077BB",
+  "Donor-flattened depth"   = "#EE7733",
+  "Constant depth"          = "#009988"
 )
 
 comparison_lookup <- c(
@@ -75,15 +75,7 @@ p_gene <- gene_plot_data |>
   theme_jp_vgrid() +
   guides(fill = "none")
 
-ggsave(
-  "power-offset-plot.pdf",
-  plot = p_variant + p_gene,
-  width = 16,
-  height = 8
-)
-
-# Paired per-gene comparison against the native per-cell offset. Under Poisson
-# sufficiency the donor-flattened arm should be indistinguishable from it.
+# Paired per-gene comparison against the native per-cell offset.
 paired_data <- gene_data |>
   pivot_wider(names_from = offset_spec, values_from = pvalue) |>
   pivot_longer(
@@ -93,13 +85,8 @@ paired_data <- gene_data |>
   ) |>
   filter(!is.na(percell), !is.na(alt_pvalue)) |>
   mutate(
-    comparison_label = factor(
-      comparison_lookup[comparison],
-      levels = unname(comparison_lookup)
-    ),
     percell_score = -log10(percell),
-    alt_score = -log10(alt_pvalue),
-    abs_diff = abs(alt_score - percell_score)
+    alt_score = -log10(alt_pvalue)
   )
 
 p_scatter <- names(comparison_lookup) |>
@@ -118,35 +105,8 @@ p_scatter <- names(comparison_lookup) |>
   }) |>
   wrap_plots(nrow = 1)
 
-ggsave("power-offset-scatter-plot.pdf", plot = p_scatter, width = 14, height = 8)
+figure <- wrap_elements(full = p_variant + p_gene) /
+  wrap_elements(full = p_scatter) +
+  plot_annotation(tag_levels = "a")
 
-summary_data <- paired_data |>
-  summarise(
-    n_genes = n(),
-    max_abs_diff_neglog10_p = max(abs_diff),
-    median_abs_diff_neglog10_p = median(abs_diff),
-    n_genes_abs_diff_gt_1e6 = sum(abs_diff > 1e-6),
-    .by = c(cell_type, comparison)
-  ) |>
-  left_join(
-    gene_plot_data |> select(cell_type, comparison = offset_spec, n_sig_gene),
-    by = c("cell_type", "comparison")
-  ) |>
-  left_join(
-    gene_plot_data |>
-      filter(offset_spec == "percell") |>
-      select(cell_type, n_sig_gene_percell = n_sig_gene),
-    by = "cell_type"
-  ) |>
-  left_join(
-    variant_plot_data |> select(cell_type, comparison = offset_spec, n_sig_variant),
-    by = c("cell_type", "comparison")
-  ) |>
-  left_join(
-    variant_plot_data |>
-      filter(offset_spec == "percell") |>
-      select(cell_type, n_sig_variant_percell = n_sig_variant),
-    by = "cell_type"
-  )
-
-write_tsv(summary_data, "power-offset-summary.tsv")
+ggsave("power-offset-plot.pdf", figure, width = 16, height = 14)

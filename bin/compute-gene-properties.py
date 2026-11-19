@@ -43,6 +43,20 @@ def compute_gene_stats(X):
 
     return mean, var, cv, nonzero_frac
 
+
+def pseudobulk_by_individual(adata):
+    pbs = []
+    for indiv in adata.obs["individual"].unique():
+        indiv_cells = adata[adata.obs["individual"] == indiv, :]
+        X_rep = indiv_cells.X.sum(axis=0)
+
+        rep_adata = sc.AnnData(X=X_rep, var=adata.var[[]].copy())
+        rep_adata.obs_names = [str(indiv)]
+        rep_adata.obs["individual"] = str(indiv)
+        pbs.append(rep_adata)
+
+    return sc.concat(pbs)
+
 cell_label = sys.argv[1]
 cell_frac = float(sys.argv[2])
 indiv_frac = float(sys.argv[3])
@@ -75,6 +89,9 @@ if subset.n_obs == 0:
 
 # Expression before count thinning — used to fix the gene set across count_frac.
 _, _, _, sc_non_zero_frac_pre_count = compute_gene_stats(subset.X)
+_, _, _, pb_non_zero_frac_pre_count = compute_gene_stats(
+    pseudobulk_by_individual(subset).X
+)
 
 subset = binomial_downsample_counts(
     subset,
@@ -85,17 +102,7 @@ subset = binomial_downsample_counts(
 
 sc_mean, sc_var, sc_cv, sc_non_zero_frac = compute_gene_stats(subset.X)
 
-pbs = []
-for indiv in subset.obs["individual"].unique():
-    indiv_cells = subset[subset.obs["individual"] == indiv, :]
-    X_rep = indiv_cells.X.sum(axis=0)
-
-    rep_adata = sc.AnnData(X=X_rep, var=subset.var[[]].copy())
-    rep_adata.obs_names = [str(indiv)]
-    rep_adata.obs["individual"] = str(indiv)
-    pbs.append(rep_adata)
-
-pb = sc.concat(pbs)
+pb = pseudobulk_by_individual(subset)
 pb_mean, pb_var, pb_cv, pb_non_zero_frac = compute_gene_stats(pb.X)
 
 df = pd.DataFrame(
@@ -110,6 +117,7 @@ df = pd.DataFrame(
         "pb_var": pb_var,
         "pb_cv": pb_cv,
         "pb_non_zero_frac": pb_non_zero_frac,
+        "pb_non_zero_frac_pre_count": pb_non_zero_frac_pre_count,
     }
     )
 

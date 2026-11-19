@@ -3,18 +3,20 @@ include {
     PLOT_PERM_CELL_FRAC ; PLOT_PERM_CELL_FRAC_MIN_CELLS ; PLOT_PERM_CELL_FRAC_DONOR_SPARSITY ;
     PLOT_PERM_COUNT_FRAC ;
     PLOT_PERM_DONOR_SUBSAMPLE ; PLOT_PERM_PB ;
-    PLOT_TIME ; PLOT_FIGURE_2 ; PLOT_TIME_QUASAR ; PLOT_CONCORDANCE_UPSET ; PLOT_CONCORDANCE_SCATTER ; PLOT_UNIQUE_SC_EGENES ;
+    PLOT_TIME ; PLOT_FIGURE_2 ; PLOT_FIGURE_3 ; PLOT_FIGURE_4 ; PLOT_FIGURE_5 ; PLOT_SC_PGLMM_VS_LMM_FIGURE ; PLOT_TIME_QUASAR ; PLOT_CONCORDANCE_UPSET ; PLOT_CONCORDANCE_SCATTER ; PLOT_UNIQUE_SC_EGENES ;
     PLOT_UNIQUE_PB_EGENES ; PLOT_EGENE_SIG_MODEL ; PLOT_POWER_CELL_FRAC ;
     PLOT_CELL_SUBSAMPLE_TIME ; PLOT_DONOR_SUBSAMPLE_TIME ; PLOT_TIME_NCELLS_SCATTER ;
     PLOT_POWER_COUNT_FRAC ; PLOT_POWER_INDIV_FRAC ; PLOT_POWER_BOTH_FRAC ;
     PLOT_POWER_GENE_PROP ; PLOT_GENE_PROPERTIES ;
-    PLOT_PERM_INT ; PLOT_INT_OUTPUT ; PLOT_GWAS_OUTPUT ; PLOT_PERM_GLOBAL ;
+    PLOT_PERM_INT ; PLOT_INT_OUTPUT ; PLOT_GWAS_OUTPUT ; PLOT_TRANS_QTL ; PLOT_PERM_GLOBAL ;
     PLOT_PERM_GWAS ; PLOT_PVALUE_SCATTER ; PLOT_MAIN_VS_INT ;
-    PLOT_INT_TIME ; PLOT_QUASAR_INT_TIME ; PLOT_SC_INT_OUTPUT ;
+    PLOT_CONTEXT_TIME ; PLOT_QUASAR_INT_TIME ; PLOT_SC_INT_OUTPUT ;
     PLOT_QUASAR_SC_INT_OUTPUT ; PLOT_PERM_SC_INT ; PLOT_PERM_SC_INT_WITHIN ;
     PLOT_PERM_SC_INT_LOGCOUNT_BINS ; PLOT_PERM_SC_ALL ; PLOT_PERM_SC_GROUPED ;
-    PLOT_GROUPED_SC_OUTPUT ; PLOT_GROUPED_VS_INT ; PLOT_GROUPED_INT_TIME ;
-    PLOT_SC_PGLMM_VS_LMM ; PLOT_PERM_SC_INT_GLOBAL ; PLOT_SC_INT_FIGURES ;
+    PLOT_PERM_SC_GROUPED as PLOT_PERM_SC_INT_GROUPED ;
+    PLOT_PERM_SC_GROUPED as PLOT_PERM_SC_INT_WITHIN_GROUPED ;
+    PLOT_GROUPED_SC_OUTPUT ; PLOT_GROUPED_VS_INT ;
+    PLOT_SC_PGLMM_VS_LMM ; PLOT_PB_LM_VS_SC_PGLMM_EGENES ; PLOT_PERM_SC_INT_GLOBAL ; PLOT_SC_INT_FIGURES ;
     PLOT_UNIQUE_SC_EGENE_FIGURES ; PLOT_UNIQUE_PB_EGENE_FIGURES ;
     PLOT_METACELL_OUTPUT ; PLOT_PC_GWAS_OUTPUT ;
     PLOT_PC_GWAS_COMPARISON ; RUN_COLOC ; PLOT_CELLS_PER_INDIV ;
@@ -56,6 +58,7 @@ workflow RUN_PLOTS {
     sc_preprocess_input
     sc_covs
     gene_filter_stats
+    annot_bed
 
     main:
     // PLOT_CLUMPED(clumped_pb_quasar_file, clumped_sc_quasar_file)
@@ -69,12 +72,12 @@ workflow RUN_PLOTS {
     // PLOT_MAF(pb_quasar_file, sc_quasar_file)
     // PLOT_CELL_SUBSAMPLE_TIME(pb_quasar_file, sc_quasar_file)
     // PLOT_DONOR_SUBSAMPLE_TIME(pb_quasar_file, sc_quasar_file)
-    // PLOT_TIME_NCELLS_SCATTER(
-    //     pb_quasar_file,
-    //     sc_quasar_file,
-    //     cluster_sizes.map { _dataset, sizes, _cells_per_indiv -> sizes }
-    // )
-    //PLOT_POWER_OFFSET(sc_offset_quasar_file)
+    PLOT_TIME_NCELLS_SCATTER(
+        pb_quasar_file,
+        sc_quasar_file,
+        cluster_sizes.map { _dataset, sizes, _cells_per_indiv -> sizes }
+    )
+    PLOT_POWER_OFFSET(sc_offset_quasar_file)
     // unique_egenes_tsv = PLOT_UNIQUE_SC_EGENES(pb_quasar_file, sc_quasar_file)
     // PLOT_EGENE_SIG_MODEL(pb_quasar_file, sc_quasar_file)
     //PLOT_POWER_CELL_FRAC(pb_quasar_file, sc_quasar_file)
@@ -130,17 +133,17 @@ workflow RUN_PLOTS {
     // PLOT_POWER_COVS(sc_quasar_file)
     PLOT_CONVERGENCE(pb_quasar_file, sc_quasar_file, saigeqtl_file)
     PLOT_PERM_SC(perm_sc_quasar_file)
-    //PLOT_PERM_CELL_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
+    PLOT_PERM_CELL_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
     //PLOT_PERM_CELL_FRAC_MIN_CELLS(perm_sc_quasar_file, skipped_combos_file)
     //PLOT_PERM_CELL_FRAC_DONOR_SPARSITY(perm_sc_quasar_file)
     // PLOT_PERM_COUNT_FRAC(perm_sc_quasar_file, perm_pb_quasar_file)
-    // cluster_sizes
-    //     .map { _dataset, _sizes, cells_per_indiv -> cells_per_indiv }
-    //     .multiMap { cells_per_indiv ->
-    //         donor_subsample: cells_per_indiv
-    //         prop_n_cells: cells_per_indiv
-    //     }
-    //     .set { cells_per_indiv_ch }
+    cluster_sizes
+        .map { _dataset, _sizes, cells_per_indiv -> cells_per_indiv }
+        .multiMap { cells_per_indiv ->
+            donor_subsample: cells_per_indiv
+            prop_n_cells: cells_per_indiv
+        }
+        .set { cells_per_indiv_ch }
     // PLOT_PERM_DONOR_SUBSAMPLE(
     //      perm_sc_quasar_file,
     //      perm_pb_quasar_file,
@@ -148,10 +151,10 @@ workflow RUN_PLOTS {
     //      cells_per_indiv_ch.donor_subsample
     // )
     //PLOT_PERM_PB(perm_pb_quasar_file)
-    // PLOT_PROP_N_CELLS(
-    //     perm_sc_quasar_file,
-    //     cells_per_indiv_ch.prop_n_cells
-    // )
+    PLOT_PROP_N_CELLS(
+        perm_sc_quasar_file,
+        cells_per_indiv_ch.prop_n_cells
+    )
 
     if ("tremor" in active_datasets) {
         tremor_plot_files = tremor_tensorqtl_compare
@@ -190,64 +193,72 @@ workflow RUN_PLOTS {
     // )
 
     // PLOT_PERM_GLOBAL(perm_pb_quasar_file)
-    // PLOT_PERM_GWAS(sc_quasar_gwas_perm_file, pb_quasar_gwas_perm_file)
-    // PLOT_PERM_INT(perm_int_pb_quasar_file)
-    // PLOT_INT_OUTPUT(pb_quasar_file)
-    // PLOT_SC_INT_OUTPUT(sc_quasar_file, castie_file, gene_map)
-    // PLOT_QUASAR_SC_INT_OUTPUT(sc_quasar_file, gene_map)
-    // PLOT_GROUPED_SC_OUTPUT(sc_quasar_file)
-    // PLOT_GROUPED_INT_TIME(sc_quasar_file)
-    // PLOT_GROUPED_VS_INT(sc_quasar_file, castie_file)
-    // PLOT_SC_PGLMM_VS_LMM(sc_quasar_file)
-    // PLOT_PERM_SC_GROUPED(perm_sc_quasar_file)
-    // PLOT_PERM_SC_INT_GLOBAL(perm_sc_quasar_file)
-    // PLOT_PERM_SC_INT(sc_quasar_perm_int_file)
+    PLOT_PERM_GWAS(sc_quasar_gwas_perm_file, pb_quasar_gwas_perm_file)
+    PLOT_PERM_INT(perm_int_pb_quasar_file)
+    PLOT_INT_OUTPUT(pb_quasar_file)
+    PLOT_SC_INT_OUTPUT(sc_quasar_file, castie_file, gene_map)
+    PLOT_QUASAR_SC_INT_OUTPUT(sc_quasar_file, gene_map)
+    PLOT_GROUPED_SC_OUTPUT(sc_quasar_file)
+    PLOT_GROUPED_VS_INT(sc_quasar_file, castie_file)
+    PLOT_SC_PGLMM_VS_LMM(sc_quasar_file)
+    PLOT_PB_LM_VS_SC_PGLMM_EGENES(pb_quasar_file, sc_quasar_file, annot_bed)
+    PLOT_PERM_SC_GROUPED(perm_sc_quasar_file, "perm-sc-grouped")
+    PLOT_PERM_SC_INT_GROUPED(sc_quasar_perm_int_file, "perm-sc-int-grouped")
+    PLOT_PERM_SC_INT_WITHIN_GROUPED(sc_quasar_perm_int_within_file, "perm-sc-int-within-grouped")
+    PLOT_PERM_SC_INT_GLOBAL(perm_sc_quasar_file)
+    PLOT_PERM_SC_INT(sc_quasar_perm_int_file)
     // Interaction eGene examples to plot: one row per gene / lead SNP.
-    // sc_int_examples_tsv = file("$projectDir/resources/sc-int-examples.tsv")
-    // sc_int_examples = channel.fromPath(sc_int_examples_tsv).splitCsv(header: true, sep: "\t")
-    // sc_int_genotypes = EXTRACT_GENOTYPES(
-    //     sc_int_examples
-    //         .map { ex -> tuple(ex.dataset) }
-    //         .unique()
-    //         .combine(all_bed, by: 0)
-    //         .map { dataset, bed -> tuple(dataset, bed, sc_int_examples_tsv) }
-    // )
-    // sc_int_logcounts = EXTRACT_SC_LOGCOUNTS(
-    //     sc_preprocess_input
-    //         .filter { info, _scf, _gene_props -> info.is_full_data }
-    //         .map { info, scf, gene_props -> tuple([info.dataset, info.cell_type], info, scf, gene_props) }
-    //         .combine(
-    //             sc_int_examples.map { ex -> [[ex.dataset, ex.cell_type]] }.unique(),
-    //             by: 0
-    //         )
-    //         .map { _key, info, scf, gene_props -> tuple(info, scf, gene_props, sc_int_examples_tsv) }
-    // )
-    // sc_int_figures_input = sc_int_examples
-    //     .map { ex -> tuple([ex.dataset, ex.cell_type, "bulk_pca+${ex.int_cov}".toString()], ex) }
-    //     .combine(
-    //         sc_covs
-    //             .filter { info, _cov_spec, _covs -> info.is_full_data }
-    //             .map { info, cov_spec, covs -> tuple([info.dataset, info.cell_type, cov_spec], info, covs) },
-    //         by: 0
-    //     )
-    //     .map { _key, ex, info, covs -> tuple([ex.dataset, ex.cell_type], info, ex, covs) }
-    //     .combine(
-    //         sc_int_logcounts.map { info, logcounts -> tuple([info.dataset, info.cell_type], logcounts) },
-    //         by: 0
-    //     )
-    //     .map { _key, info, ex, covs, logcounts -> tuple(ex.dataset, info, ex, covs, logcounts) }
-    //     .combine(sc_int_genotypes, by: 0)
-    //     .map { _dataset, info, ex, covs, logcounts, geno -> tuple(info, ex, covs, logcounts, geno) }
-    // PLOT_SC_INT_FIGURES(sc_int_figures_input)
+    sc_int_examples_tsv = file("$projectDir/resources/sc-int-examples.tsv")
+    sc_int_examples = channel.fromPath(sc_int_examples_tsv).splitCsv(header: true, sep: "\t")
+    sc_int_genotypes = EXTRACT_GENOTYPES(
+        sc_int_examples
+            .map { ex -> tuple(ex.dataset) }
+            .unique()
+            .combine(all_bed, by: 0)
+            .map { dataset, bed -> tuple(dataset, bed, sc_int_examples_tsv) }
+    )
+    sc_int_logcounts = EXTRACT_SC_LOGCOUNTS(
+        sc_preprocess_input
+            .filter { info, _scf, _gene_props -> info.is_full_data }
+            .map { info, scf, gene_props -> tuple([info.dataset, info.cell_type], info, scf, gene_props) }
+            .combine(
+                sc_int_examples.map { ex -> [[ex.dataset, ex.cell_type]] }.unique(),
+                by: 0
+            )
+            .map { _key, info, scf, gene_props -> tuple(info, scf, gene_props, sc_int_examples_tsv) }
+    )
+    sc_int_figures_input = sc_int_examples
+        .map { ex -> tuple([ex.dataset, ex.cell_type, "bulk_pca+${ex.int_cov}".toString()], ex) }
+        .combine(
+            sc_covs
+                .filter { info, _cov_spec, _covs -> info.is_full_data }
+                .map { info, cov_spec, covs -> tuple([info.dataset, info.cell_type, cov_spec], info, covs) },
+            by: 0
+        )
+        .map { _key, ex, info, covs -> tuple([ex.dataset, ex.cell_type], info, ex, covs) }
+        .combine(
+            sc_int_logcounts.map { info, logcounts -> tuple([info.dataset, info.cell_type], logcounts) },
+            by: 0
+        )
+        .map { _key, info, ex, covs, logcounts -> tuple(ex.dataset, info, ex, covs, logcounts) }
+        .combine(sc_int_genotypes, by: 0)
+        .map { _dataset, info, ex, covs, logcounts, geno -> tuple(info, ex, covs, logcounts, geno) }
+    PLOT_SC_INT_FIGURES(sc_int_figures_input)
     // PLOT_METACELL_OUTPUT(sc_quasar_file, seacells_file)
     // PLOT_PC_GWAS_OUTPUT(pc_gwas_file, pc_sc_gwas_file)
-    // PLOT_PERM_SC_INT_WITHIN(sc_quasar_perm_int_within_file)
-    // PLOT_PERM_SC_INT_LOGCOUNT_BINS(sc_quasar_perm_int_logcount_file)
-    // PLOT_PERM_SC_ALL(
-    //     PLOT_PERM_SC_INT_GLOBAL.out.qq
-    //         .mix(PLOT_PERM_SC_INT.out.qq, PLOT_PERM_SC_INT_WITHIN.out.qq)
-    //         .collect()
-    // )
+    PLOT_PERM_SC_INT_WITHIN(sc_quasar_perm_int_within_file)
+    PLOT_PERM_SC_INT_LOGCOUNT_BINS(sc_quasar_perm_int_logcount_file)
+    PLOT_PERM_SC_ALL(
+        PLOT_PERM_SC_INT_GLOBAL.out.qq
+            .mix(
+                PLOT_PERM_SC_INT.out.qq,
+                PLOT_PERM_SC_INT_WITHIN.out.qq,
+                PLOT_PERM_SC_GROUPED.out.qq,
+                PLOT_PERM_SC_INT_GROUPED.out.qq,
+                PLOT_PERM_SC_INT_WITHIN_GROUPED.out.qq
+            )
+            .collect()
+    )
     PLOT_TIME(pb_quasar_file, sc_quasar_file, saigeqtl_file)
     // PLOT_PC_GWAS_COMPARISON(pc_gwas_file, pc_sc_gwas_file)
     PLOT_CONCORDANCE_SCATTER(pb_quasar_file, sc_quasar_file, saigeqtl_file)
@@ -257,12 +268,42 @@ workflow RUN_PLOTS {
         PLOT_POWER.out.figure2,
         PLOT_TIME.out.figure2
     )
+    PLOT_FIGURE_3(
+        PLOT_POWER.out.figure3,
+        PLOT_CONCORDANCE_SCATTER.out.figure3
+    )
+    PLOT_FIGURE_4(
+        PLOT_PERM_CELL_FRAC.out.figure4,
+        PLOT_PROP_N_CELLS.out.figure4
+    )
+    PLOT_SC_PGLMM_VS_LMM_FIGURE(
+        PLOT_SC_PGLMM_VS_LMM.out.pglmm_lmm,
+        PLOT_POWER.out.pglmm_lmm,
+        PLOT_TIME.out.pglmm_lmm
+    )
     // PLOT_GENE_PROPERTIES(gene_properties_file)
     // PLOT_GWAS_OUTPUT(sc_quasar_gwas_file, pb_quasar_gwas_file)
+    PLOT_TRANS_QTL(
+        pb_quasar_gwas_file,
+        sc_quasar_gwas_file,
+        annot_bed,
+        gene_map
+    )
     // PLOT_PVALUE_SCATTER(pb_quasar_file, sc_quasar_file)
     // PLOT_ZSCORE_SCATTER(pb_quasar_file, sc_quasar_file, saigeqtl_file)
-    // PLOT_MAIN_VS_INT(sc_quasar_file)
-    // PLOT_INT_TIME(sc_quasar_file, castie_file)
-    // PLOT_QUASAR_INT_TIME(sc_quasar_file)
-    // RUN_COLOC(sc_quasar_file)
+    PLOT_MAIN_VS_INT(sc_quasar_file)
+    PLOT_CONTEXT_TIME(sc_quasar_file, castie_file)
+    PLOT_QUASAR_INT_TIME(sc_quasar_file)
+    PLOT_FIGURE_5(
+        PLOT_PERM_SC_ALL.out.figure5,
+        PLOT_CONTEXT_TIME.out.figure5,
+        PLOT_GROUPED_VS_INT.out.figure5
+    )
+    // TEMP: skip coloc.
+    // RUN_COLOC(
+    //     pb_quasar_file,
+    //     sc_quasar_file,
+    //     annot_bed,
+    //     file("${projectDir}/data/finngen-r13-autoimmune")
+    // )
 }
