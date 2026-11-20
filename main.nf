@@ -427,6 +427,8 @@ workflow {
             .filter { _sc_type, info, _pheno ->
                 info.cell_type == "B_all" && info.is_full_data
             }
+            // TEMP: GWAS-only run.
+            .filter { false }
             .map { _sc_type, info, pheno -> tuple(info.dataset, info, pheno) }
             .combine(ds_meta, by: 0)
             .map { _dataset, info, pheno, h5ad -> tuple(info, pheno, h5ad) }
@@ -461,6 +463,8 @@ workflow {
 
     slingshot_input = cell_infos
         .filter { it.cell_type == "B_all" }
+        // TEMP: GWAS-only run.
+        .filter { false }
         .map { info -> tuple(info.dataset, info) }
         .combine(ds_meta, by: 0)
         .map { dataset, info, scf -> tuple(info, scf) }
@@ -472,6 +476,8 @@ workflow {
         .filter { it.dataset == "onek1k" }
         .filter { it.is_full_data }
         .filter { !(it.cell_type in ["Plasma", "CD4_SOX4", "B_all"]) }
+        // TEMP: GWAS-only run.
+        .filter { false }
         .map { info -> tuple(info.dataset, info) }
         .combine(ds_meta, by: 0)
         .map { dataset, info, scf -> tuple(info, scf) }
@@ -494,6 +500,8 @@ workflow {
     saige_subset_bed = SAIGE_SUBSET_BED(all_bed)
     saigeqtl_input = sc_input
         .filter { it[0].is_full_data && it[0].cell_type in ["Plasma", "B_IN", "CD4_NC"] }
+        // TEMP: GWAS-only run.
+        .filter { false }
         .map { info, sc_counts_file, pb_covs_file, geno_pcs_file ->
             tuple(info.dataset, info, sc_counts_file, pb_covs_file, geno_pcs_file)
         }
@@ -575,7 +583,8 @@ workflow {
         .combine(all_bed, by: 0)
         .map { dataset, info, pheno, covs, bed -> tuple(info, pheno, covs, bed) }
 
-    pc_gwas = RUN_PC_GWAS(pc_gwas_input)
+    // TEMP: GWAS-only run, without the PC phenotype GWAS.
+    pc_gwas = RUN_PC_GWAS(pc_gwas_input.filter { false })
 
     int_cov = Channel.of("none", "age", "sex")
     models_for_pb_type = [
@@ -640,8 +649,9 @@ workflow {
         }
     pb_quasar_input = pb_quasar_branched.other.mix(pb_quasar_tmm)
 
-    pb_quasar = RUN_QUASAR_PB(pb_quasar_input.filter { Utils.keepPbQuasarTemp(it[0]) })
-        .mix(RUN_QUASAR_PB_LM_CW(pb_lm_cw_input))
+    // TEMP: GWAS-only run.
+    pb_quasar = RUN_QUASAR_PB(pb_quasar_input.filter { Utils.keepPbQuasarTemp(it[0]) }.filter { false })
+        .mix(RUN_QUASAR_PB_LM_CW(pb_lm_cw_input.filter { false }))
     pb_quasar = Utils.attachGeneProperties(pb_quasar, gene_properties)
 
     pb_quasar = COMPUTE_QUASAR_POWER_PB(pb_quasar)
@@ -787,22 +797,25 @@ workflow {
 
     gene_map = EXTRACT_GENE_MAP(ds_meta.filter { dataset, _h5ad -> dataset == "onek1k" })
 
-    PT_SEEDS(
-        slingshot_adata,
-        sc_expr_covs,
-        pb_expr_covs,
-        geno_pcs,
-        sc_counts,
-        anno_bed,
-        bed_files,
-        sc_covs,
-        gene_map
-    )
+    // TEMP: GWAS-only run.
+    // PT_SEEDS(
+    //     slingshot_adata,
+    //     sc_expr_covs,
+    //     pb_expr_covs,
+    //     geno_pcs,
+    //     sc_counts,
+    //     anno_bed,
+    //     bed_files,
+    //     sc_covs,
+    //     gene_map
+    // )
 
     // CASTIE on OneK1K B_all counts and SCT counts with the pseudotime interaction,
     // using the same filtered covariate file as the matching single-cell P-GLMM run.
     castie_pheno = sc_counts.mix(sc_sct_counts)
         .filter { it[1].dataset == "onek1k" && it[1].is_full_data && it[1].cell_type == "B_all" }
+        // TEMP: GWAS-only run.
+        .filter { false }
         .map { data_type, info, pheno_file -> tuple(info, data_type, pheno_file) }
     castie_covs = sc_covs.filter { info, cov_spec, _covs ->
         info.dataset == "onek1k" &&
@@ -869,7 +882,8 @@ workflow {
         .combine(all_bed, by: 0)
         .map { dataset, info, pheno, covs, bed -> tuple(info, pheno, covs, bed) }
 
-    pc_sc_gwas = RUN_PC_SC_GWAS(pc_sc_gwas_input)
+    // TEMP: GWAS-only run, without the PC phenotype GWAS.
+    pc_sc_gwas = RUN_PC_SC_GWAS(pc_sc_gwas_input.filter { false })
 
     models_for_data_type = [
         "counts": ["p_glmm_sc"],
@@ -942,6 +956,8 @@ workflow {
     sc_binned_groups = COMPUTE_CELL_GROUPS(
         sc_input_by_mode.binned
             .filter { allow_grouped_int_cov(it[0].int_cov) }
+            // TEMP: GWAS-only run.
+            .filter { false }
             .map { info, sc_pheno, covs, anno, plink -> tuple(info, covs) }
     )
     // Binned runs fit donor-level bulk_pca covariates only; the binning variable just defines the groups.
@@ -981,6 +997,8 @@ workflow {
 
     sc_quasar_observed_input = sc_quasar_input_full
         .filter { Utils.keepScQuasarTemp(it[0]) }
+        // TEMP: GWAS-only run.
+        .filter { false }
         .flatMap { row ->
             def info = row[0]
             def ablate_ncells = info.model == "p_glmm_sc"
@@ -1010,6 +1028,8 @@ workflow {
     sc_offset_base = sc_counts
         .map { sc_type, info, sc_pheno_file -> tuple(info, sc_pheno_file) }
         .filter { it[0].dataset == "onek1k" && it[0].cell_type == "CD4_NC" && it[0].is_full_data }
+        // TEMP: GWAS-only run.
+        .filter { false }
 
     sc_offset_files = COMPUTE_SC_OFFSETS(sc_offset_base)
         .flatMap { info, percell, donorflat, constant ->
@@ -1082,6 +1102,8 @@ workflow {
       .filter( { is_int_sc_cov(it[0].int_cov) } )
       .filter( {it[0].k in ["none", 5]})
       .filter { Utils.keepScPermTemp(it[0]) || Utils.keepScIntPermTemp(it[0]) }
+      // TEMP: GWAS-only run.
+      .filter { false }
       // No permutations on the CD4_NC joint cell × individual grid (keep full data only).
       .filter( { !is_joint_both_frac(it[0]) || it[0].is_full_data } )
       // Repeat the p_glmm_sc cell-fraction series with the saddlepoint approximation ablated.
@@ -1122,6 +1144,8 @@ workflow {
       // PB lm permutations run on Tremor full data and the OneK1K
       // cell-downsampling series.
       .filter { it[0] in ["tremor", "onek1k"] }
+      // TEMP: GWAS-only run.
+      .filter { false }
     permute_bed_files_pb = PERMUTE_BED_PB(rep_bed_files_pb)
 
     perm_pb_quasar_input = pb_quasar_input
@@ -1129,6 +1153,8 @@ workflow {
       .filter { it[0].int_cov == "none" }
       .filter { !(it[0].cell_type in ["B_all", "T_all"]) }
       .filter { Utils.keepPbPermTemp(it[0]) }
+      // TEMP: GWAS-only run.
+      .filter { false }
       .filter {
           it[0].dataset == "onek1k"
               || it[0].dataset == "tremor"
@@ -1254,6 +1280,8 @@ workflow {
       }
       .map { info, cov_spec, cov -> tuple(info.dataset, int_cov_for_cov_spec[cov_spec], info.cell_type, cov) }
       .combine(channel.of(1..10))
+      // TEMP: GWAS-only run.
+      .filter { false }
       .map { dataset, int_cov, cell_type, covs, ind -> tuple(dataset, int_cov, cell_type, covs, ind) }
 
     permute_sc_covs = PERMUTE_SC_COV(rep_sc_cov_files)
@@ -1319,6 +1347,8 @@ workflow {
       }
       .map { info, cov_spec, cov -> tuple(info.dataset, int_cov_for_cov_spec[cov_spec], info.cell_type, cov) }
       .combine(channel.of(1..10))
+      // TEMP: GWAS-only run.
+      .filter { false }
       .map { dataset, int_cov, cell_type, covs, ind -> tuple(dataset, int_cov, cell_type, covs, ind) }
 
     permute_sc_covs_within = PERMUTE_SC_COV_WITHIN(rep_sc_cov_files_within)
@@ -1374,6 +1404,8 @@ workflow {
       }
       // TEMP: SC interaction perms only on full-data B_all pseudotime.
       .filter { info, cov_spec, cov -> info.is_full_data && info.cell_type == "B_all" }
+      // TEMP: GWAS-only run.
+      .filter { false }
       .map { info, cov_spec, cov ->
         tuple(
           [info.dataset, info.cell_type, info.cell_frac, info.indiv_frac, info.min_n_cells, info.count_frac],

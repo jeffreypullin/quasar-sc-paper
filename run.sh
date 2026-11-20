@@ -7,7 +7,7 @@ mkdir -p data/tmp
 export NXF_TEMP="$PWD/data/tmp"
 
 retry=0
-max_attempts=5
+max_attempts=10
 args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
