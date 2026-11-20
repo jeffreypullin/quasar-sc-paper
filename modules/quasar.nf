@@ -66,7 +66,7 @@ process RUN_QUASAR_PB {
     def int_flag = (info.int_cov != "none") ? "-i ${interaction_cov}" : ""
     """
     /usr/bin/time -p -o "${info.dataset}-${info.model}-${info.chr}-${info.cell_type}-${info.int_cov}-time.txt" \
-      /home/jp2045/quasar/build/quasar \
+      ${params.quasar_bin} \
       -p "$prefix" \
       -b "$pheno_bed" \
       -c "$covs" \
@@ -98,7 +98,7 @@ process RUN_QUASAR_PB_LM_CW {
     def base = "${info.dataset}-${info.model}-${info.chr}-${info.cell_type}-${info.int_cov}"
     """
     /usr/bin/time -p -o "${base}-time.txt" \
-      /home/jp2045/quasar/build/quasar \
+      ${params.quasar_bin} \
       -p "$prefix" \
       -b "$pheno_bed" \
       -c "$covs" \
@@ -131,7 +131,7 @@ process RUN_QUASAR_SC {
     def base = "${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.data_type}-${info.int_cov}-K${info.k}${Utils.ablateSuffix(info)}"
     """
     /usr/bin/time -p -o "${base}-time.txt" \
-      /home/jp2045/quasar/build/quasar \
+      ${params.quasar_bin} \
       --plink "$prefix" \
       --sc-pheno "$pheno_bed" \
       --anno "$anno" \
@@ -168,7 +168,7 @@ process RUN_QUASAR_SC_GENO_PERM {
     def n_perm = info.int_cov == "none" ? 10 : 5
     """
     /usr/bin/time -p -o "${base}-time.txt" \
-      /home/jp2045/quasar/build/quasar \
+      ${params.quasar_bin} \
       --plink "$prefix" \
       --sc-pheno "$pheno_bed" \
       --anno "$anno" \
@@ -201,7 +201,7 @@ process RUN_QUASAR_SC_OFFSET {
     def base = "${info.dataset}-${info.chr}-${info.cell_type}-${info.model}-${info.offset_spec}"
     """
     /usr/bin/time -p -o "${base}-time.txt" \
-      /home/jp2045/quasar/build/quasar \
+      ${params.quasar_bin} \
       --plink "$prefix" \
       --sc-pheno "$pheno_bed" \
       --anno "$anno" \
@@ -231,7 +231,7 @@ process RUN_QUASAR_SC_GWAS {
     def out_base = "${info.dataset}-pheno-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}"
     """
     /usr/bin/time -p -o "${out_base}-time.txt" \
-      /home/jp2045/quasar/build/quasar \
+      ${params.quasar_bin} \
       --plink "$prefix" \
       --sc-pheno "$pheno_bed" \
       --anno "$anno" \
@@ -263,7 +263,7 @@ process RUN_QUASAR_PB_GWAS {
     def out_base = "${info.dataset}-pheno-${info.model}-chr${info.pheno_chr}-geno-${info.chr}-${info.cell_type}"
     """
     /usr/bin/time -p -o "${out_base}-time.txt" \
-      /home/jp2045/quasar/build/quasar \
+      ${params.quasar_bin} \
       -p "$prefix" \
       -b "$pheno_bed" \
       -c "$covs" \
@@ -295,7 +295,7 @@ process RUN_QUASAR_GWAS {
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
     """
     /usr/bin/time -p -o "${out_prefix}-time.txt" \
-      /home/jp2045/quasar/build/quasar \
+      ${params.quasar_bin} \
       -p "$prefix" \
       -b "$pheno_bed" \
       -c "$covs" \
@@ -324,7 +324,7 @@ process RUN_QUASAR_SC_PC_GWAS {
     def prefix = "${plink_bed.getParent().toString() + '/' + plink_bed.getSimpleName()}"
     """
     /usr/bin/time -p -o "${out_prefix}-time.txt" \
-      /home/jp2045/quasar/build/quasar \
+      ${params.quasar_bin} \
       --plink "$prefix" \
       --sc-pheno "$pheno" \
       --cov "$covs" \
